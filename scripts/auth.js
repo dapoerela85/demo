@@ -6,7 +6,7 @@ function md5(string) {
 // Fungsi untuk memeriksa login
 async function checkLogin() {
     try {
-        const response = await fetch('https://dapoerela85.github.io/demo/_data/admin-credentials.md');
+        const response = await fetch('/_data/admin-credentials.md');
         if (!response.ok) throw new Error('Failed to fetch credentials');
         
         const text = await response.text();
