@@ -1,0 +1,23 @@
+name: Update Site Data
+
+on:
+  repository_dispatch:
+    types: [update_content]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Update content
+      run: |
+        echo "${{ github.event.client_payload.content }}" > _data/site-content.md
+        
+    - name: Commit changes
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add _data/site-content.md
+        git commit -m "Update content via admin dashboard"
+        git push

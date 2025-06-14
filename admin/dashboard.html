@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="../styles/admin.css">
+</head>
+<body>
+    <header>
+        <h1>Admin Dashboard</h1>
+        <a href="logout.html" class="logout-btn">Logout</a>
+    </header>
+    
+    <div class="dashboard-container">
+        <section class="content-editor">
+            <h2>Edit Konten Situs</h2>
+            <textarea id="contentEditor" rows="20"></textarea>
+            <button id="saveContent">Simpan Perubahan</button>
+        </section>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="../scripts/auth.js"></script>
+    <script>
+        // Muat konten dari file markdown
+        async function loadContent() {
+            const response = await fetch('../_data/site-content.md');
+            const content = await response.text();
+            document.getElementById('contentEditor').value = content;
+        }
+        
+        // Simpan konten ke file markdown (menggunakan GitHub API)
+        async function saveContent() {
+            const content = document.getElementById('contentEditor').value;
+            const response = await fetch('https://api.github.com/repos/[username]/[repo]/contents/_data/site-content.md', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'token [GITHUB_TOKEN]',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: 'Update konten via admin dashboard',
+                    content: btoa(unescape(encodeURIComponent(content))),
+                    sha: await getFileSHA()
+                })
+            });
+            
+            if (response.ok) {
+                alert('Konten berhasil disimpan!');
+            } else {
+                alert('Gagal menyimpan konten');
+            }
+        }
+        
+        async function getFileSHA() {
+            const response = await fetch('https://api.github.com/repos/[username]/[repo]/contents/_data/site-content.md');
+            const data = await response.json();
+            return data.sha;
+        }
+        
+        document.getElementById('saveContent').addEventListener('click', saveContent);
+        window.addEventListener('DOMContentLoaded', loadContent);
+    </script>
+</body>
+</html>
