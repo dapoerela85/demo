@@ -5,23 +5,45 @@ function md5(string) {
 
 // Fungsi untuk memeriksa login
 async function checkLogin() {
-    // Ambil kredensial dari file markdown
-    const response = await fetch('https://dapoerela85.github.io/demo/_data/admin-credentials.md');
-    const text = await response.text();
-    const credentials = text.match(/username: (.*)\npassword: (.*)/);
-    
-    if (!credentials) {
-        console.error('File kredensial tidak valid');
+    try {
+        const response = await fetch('/_data/admin-credentials.md');
+        if (!response.ok) throw new Error('Failed to fetch credentials');
+        
+        const text = await response.text();
+        console.log('Raw file content:', text);  // Debugging output
+
+        // Clean the text and parse credentials
+        const cleanText = text.trim();
+        
+        // Alternative parsing methods:
+
+        // METHOD 1: Simple line parsing
+        const lines = cleanText.split('\n');
+        const credentials = {};
+        lines.forEach(line => {
+            const [key, value] = line.split(':').map(part => part.trim());
+            if (key && value) credentials[key] = value;
+        });
+
+        // METHOD 2: YAML front matter parsing (if using --- delimiters)
+        // const yamlContent = cleanText.split('---')[1]; // For Jekyll-style files
+        // ...parse yamlContent...
+
+        if (!credentials.username || !credentials.password) {
+            console.error('Invalid credentials format');
+            return false;
+        }
+
+        const inputUsername = document.getElementById('username').value;
+        const inputPassword = md5(document.getElementById('password').value);
+        
+        return inputUsername === credentials.username && 
+               inputPassword === credentials.password;
+
+    } catch (error) {
+        console.error('Authentication error:', error);
         return false;
     }
-    
-    const storedUsername = credentials[1].trim();
-    const storedPassword = credentials[2].trim();
-    
-    const inputUsername = document.getElementById('username').value;
-    const inputPassword = md5(document.getElementById('password').value);
-    
-    return inputUsername === storedUsername && inputPassword === storedPassword;
 }
 
 // Handle form login
