@@ -5,45 +5,14 @@ function md5(string) {
 
 // Fungsi untuk memeriksa login
 async function checkLogin() {
-    try {
-        const response = await fetch('/_data/admin-credentials.md');
-        if (!response.ok) throw new Error('Failed to fetch credentials');
-        
-        const text = await response.text();
-        console.log('Raw file content:', text);  // Debugging output
-
-        // Clean the text and parse credentials
-        const cleanText = text.trim();
-        
-        // Alternative parsing methods:
-
-        // METHOD 1: Simple line parsing
-        const lines = cleanText.split('\n');
-        const credentials = {};
-        lines.forEach(line => {
-            const [key, value] = line.split(':').map(part => part.trim());
-            if (key && value) credentials[key] = value;
-        });
-
-        // METHOD 2: YAML front matter parsing (if using --- delimiters)
-        // const yamlContent = cleanText.split('---')[1]; // For Jekyll-style files
-        // ...parse yamlContent...
-
-        if (!credentials.username || !credentials.password) {
-            console.error('Invalid credentials format');
-            return false;
-        }
-
-        const inputUsername = document.getElementById('username').value;
-        const inputPassword = md5(document.getElementById('password').value);
-        
-        return inputUsername === credentials.username && 
-               inputPassword === credentials.password;
-
-    } catch (error) {
-        console.error('Authentication error:', error);
-        return false;
-    }
+    // Temporary hardcoded credentials
+    const storedUsername = 'admin';
+    const storedPassword = '5f4dcc3b5aa765d61d8327deb882cf99'; // 'password' hashed
+    
+    const inputUsername = document.getElementById('username').value;
+    const inputPassword = md5(document.getElementById('password').value);
+    
+    return inputUsername === storedUsername && inputPassword === storedPassword;
 }
 
 // Handle form login
