@@ -1,40 +1,33 @@
 // MD5 hashing with input validation
 function md5(string) {
-    if (!string || typeof string !== 'string') {
-        console.error('Invalid input for MD5 function');
-        return '';
-    }
+    if (!string || typeof string !== 'string') return '';
     return CryptoJS.MD5(string).toString();
 }
 
-// Login verification with debug logging
+// Login verification
 async function checkLogin() {
     try {
+        // Expected credentials
         const storedUsername = 'admin';
-        const storedPasswordHash = '5f4dcc3b5aa765d61d8327deb882cf99'; // MD5 of "password"
+        const correctPassword = 'password'; // The actual password, not the hash
         
-        const usernameInput = document.getElementById('username');
-        const passwordInput = document.getElementById('password');
+        // Get user inputs
+        const inputUsername = document.getElementById('username').value.trim();
+        const inputPassword = document.getElementById('password').value;
         
-        if (!usernameInput || !passwordInput) {
-            console.error('Could not find username/password inputs');
-            return false;
-        }
-
-        const inputUsername = usernameInput.value.trim();
-        const inputPassword = passwordInput.value;
-        
-        console.log('Input values:', {
+        console.log('Raw inputs:', {
             username: inputUsername,
             password: inputPassword,
             passwordLength: inputPassword.length
         });
 
-        const inputPasswordHash = md5(inputPassword);
-        console.log('Generated hash:', inputPasswordHash);
-
+        // Compare directly (not recommended for production)
         const isAuthenticated = (inputUsername === storedUsername) && 
-                              (inputPasswordHash === storedPasswordHash);
+                              (inputPassword === correctPassword);
+        
+        // Or compare hashes (better)
+        // const isAuthenticated = (inputUsername === storedUsername) && 
+        //                       (md5(inputPassword) === '5f4dcc3b5aa765d61d8327deb882cf99');
         
         console.log('Authentication result:', isAuthenticated);
         return isAuthenticated;
@@ -45,7 +38,7 @@ async function checkLogin() {
     }
 }
 
-// Form submission handler with better error messages
+// Form submission handler
 document.getElementById('loginForm')?.addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -57,20 +50,18 @@ document.getElementById('loginForm')?.addEventListener('submit', async function(
     } else {
         errorElement.textContent = 'Invalid username or password';
         errorElement.style.display = 'block';
-        
-        // Clear password field
         document.getElementById('password').value = '';
     }
 });
 
-// Session management (unchanged)
+// Session management
 if (window.location.pathname.includes('/admin/') && 
     !window.location.pathname.includes('login.html') &&
     localStorage.getItem('adminAuthenticated') !== 'true') {
     window.location.href = 'login.html';
 }
 
-// Logout handler (unchanged)
+// Logout handler
 if (window.location.pathname.includes('logout.html')) {
     localStorage.removeItem('adminAuthenticated');
     window.location.href = 'login.html';
