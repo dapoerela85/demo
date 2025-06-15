@@ -1,100 +1,76 @@
-// Ensure CryptoJS is loaded - add this to your HTML head:
-// <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-
-// MD5 hashing function
+// MD5 hashing with input validation
 function md5(string) {
-    if (typeof CryptoJS === 'undefined') {
-        console.error('CryptoJS not loaded!');
-        return null;
+    if (!string || typeof string !== 'string') {
+        console.error('Invalid input for MD5 function');
+        return '';
     }
     return CryptoJS.MD5(string).toString();
 }
 
-// Improved checkLogin function
+// Login verification with debug logging
 async function checkLogin() {
     try {
+        const storedUsername = 'admin';
+        const storedPasswordHash = '5f4dcc3b5aa765d61d8327deb882cf99'; // MD5 of "password"
+        
         const usernameInput = document.getElementById('username');
         const passwordInput = document.getElementById('password');
         
         if (!usernameInput || !passwordInput) {
-            console.error('Username or password input not found');
+            console.error('Could not find username/password inputs');
             return false;
         }
 
-        // Hardcoded credentials (for demo only)
-        const storedUsername = 'admin';
-        const storedPasswordHash = '5f4dcc3b5aa765d61d8327deb882cf99'; // 'password'
-        
         const inputUsername = usernameInput.value.trim();
-        const inputPasswordHash = md5(passwordInput.value);
+        const inputPassword = passwordInput.value;
         
-        if (!inputPasswordHash) {
-            console.error('Hashing failed');
-            return false;
-        }
-
-        console.log('Comparing:', {
-            inputUsername,
-            storedUsername,
-            inputPasswordHash,
-            storedPasswordHash
+        console.log('Input values:', {
+            username: inputUsername,
+            password: inputPassword,
+            passwordLength: inputPassword.length
         });
 
-        return inputUsername === storedUsername && 
-               inputPasswordHash === storedPasswordHash;
+        const inputPasswordHash = md5(inputPassword);
+        console.log('Generated hash:', inputPasswordHash);
+
+        const isAuthenticated = (inputUsername === storedUsername) && 
+                              (inputPasswordHash === storedPasswordHash);
+        
+        console.log('Authentication result:', isAuthenticated);
+        return isAuthenticated;
+
     } catch (error) {
         console.error('Login check failed:', error);
         return false;
     }
 }
 
-// Proper form event handling
-function initializeLoginForm() {
-    const loginForm = document.getElementById('loginForm');
+// Form submission handler with better error messages
+document.getElementById('loginForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
     
-    if (!loginForm) {
-        console.error('Login form not found');
-        return;
-    }
+    const errorElement = document.getElementById('errorMessage');
     
-    loginForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
+    if (await checkLogin()) {
+        localStorage.setItem('adminAuthenticated', 'true');
+        window.location.href = 'dashboard.html';
+    } else {
+        errorElement.textContent = 'Invalid username or password';
+        errorElement.style.display = 'block';
         
-        const errorElement = document.getElementById('errorMessage') || 
-                           document.createElement('div');
-        
-        try {
-            const isAuthenticated = await checkLogin();
-            
-            if (isAuthenticated) {
-                localStorage.setItem('adminAuthenticated', 'true');
-                window.location.href = 'dashboard.html';
-            } else {
-                errorElement.textContent = 'Username atau password salah';
-                errorElement.style.color = 'red';
-                loginForm.appendChild(errorElement);
-            }
-        } catch (error) {
-            console.error('Login error:', error);
-            errorElement.textContent = 'Terjadi kesalahan saat login';
-            loginForm.appendChild(errorElement);
-        }
-    });
-}
-
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    initializeLoginForm();
-    
-    // Session verification for admin pages
-    if (window.location.pathname.includes('/admin/') && 
-        !window.location.pathname.includes('login.html') &&
-        localStorage.getItem('adminAuthenticated') !== 'true') {
-        window.location.href = 'login.html';
+        // Clear password field
+        document.getElementById('password').value = '';
     }
 });
 
-// Logout handler
+// Session management (unchanged)
+if (window.location.pathname.includes('/admin/') && 
+    !window.location.pathname.includes('login.html') &&
+    localStorage.getItem('adminAuthenticated') !== 'true') {
+    window.location.href = 'login.html';
+}
+
+// Logout handler (unchanged)
 if (window.location.pathname.includes('logout.html')) {
     localStorage.removeItem('adminAuthenticated');
     window.location.href = 'login.html';
