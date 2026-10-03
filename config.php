@@ -42,11 +42,23 @@ if (!function_exists('formatRupiah')) {
     }
 }
 
-// Helper badge status
-function renderStatusBadge($status) {
-    if (strtolower($status) === 'lunas') {
-        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Lunas</span>';
+if (!function_exists('renderStatusBadge')) {
+    function renderStatusBadge($status) {
+        if (strtolower($status) === 'lunas' || strtolower($status) === 'aktif') {
+            return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">' . ucfirst($status) . '</span>';
+        }
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800">' . ucfirst($status) . '</span>';
     }
-    return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"><i class="fas fa-clock mr-1"></i> Belum Lunas</span>';
+}
+
+// Helper Sinkronisasi Total Belanja Pelanggan
+function syncTotalPelanggan($pdo, $pelanggan_id) {
+    if (!$pelanggan_id) return;
+    $stmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) FROM penjualan WHERE pelanggan_id = ?");
+    $stmt->execute([$pelanggan_id]);
+    $total = $stmt->fetchColumn() ?? 0;
+
+    $update = $pdo->prepare("UPDATE pelanggan SET total = ? WHERE id = ?");
+    $update->execute([$total, $pelanggan_id]);
 }
 ?>
