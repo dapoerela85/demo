@@ -2,6 +2,7 @@
 // admin/index.php
 require_once __DIR__ . '/auth.php';
 
+// Handle Action Delete (Bisa hapus Single Item atau Hapus Seluruh Transaksi Tanggal Tersebut)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
     $deleteId = $_POST['id'] ?? null;
     $deleteAllGroup = $_POST['delete_group'] ?? '0';
@@ -33,14 +34,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-$year   = $_GET['year'] ?? '';
-$month  = $_GET['month'] ?? '';
+// Filter Parameters
+$year         = $_GET['year'] ?? '';
+$month        = $_GET['month'] ?? '';
 $statusFilter = $_GET['status'] ?? '';
-$search = trim($_GET['search'] ?? '');
-$page   = max(1, intval($_GET['page'] ?? 1));
-$limit  = 10;
-$offset = ($page - 1) * $limit;
+$search       = trim($_GET['search'] ?? '');
+$page         = max(1, intval($_GET['page'] ?? 1));
+$limit        = 10;
+$offset       = ($page - 1) * $limit;
 
+// Query Construction
 $whereClause = "WHERE 1=1";
 $params = [];
 
@@ -63,15 +66,18 @@ if (!empty($search)) {
     $params[':s3'] = "%{$search}%";
 }
 
+// Count Total Rows
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM penjualan {$whereClause}");
 $countStmt->execute($params);
 $totalRows = $countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $limit));
 
+// Fetch Data Penjualan
 $dataStmt = $pdo->prepare("SELECT *, (harga_produk * jumlah) AS total_harga FROM penjualan {$whereClause} ORDER BY tgl DESC, id DESC LIMIT {$limit} OFFSET {$offset}");
 $dataStmt->execute($params);
 $salesData = $dataStmt->fetchAll();
 
+// Hitung jumlah item dalam transaksi yang sama (Multi-Item Indicator)
 $itemCountMap = [];
 if (!empty($salesData)) {
     $keys = array_map(function($r) {
@@ -87,6 +93,7 @@ if (!empty($salesData)) {
     }
 }
 
+// Summary
 $summaryStmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) AS total_revenue, SUM(jumlah) AS total_items, COUNT(*) AS total_trx FROM penjualan {$whereClause}");
 $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch();
@@ -102,8 +109,9 @@ $summary = $summaryStmt->fetch();
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
 
+    <!-- Top Navigation Bar dengan Navigasi Master Pelanggan -->
     <header class="bg-gray-900 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between items-center gap-3">
             <div class="flex items-center space-x-3">
                 <div class="bg-orange-600 p-2 rounded-lg text-white font-bold text-lg">
                     <i class="fas fa-user-shield"></i>
@@ -113,10 +121,17 @@ $summary = $summaryStmt->fetch();
                     <p class="text-xs text-gray-400">Kelola Seluruh Data Penjualan Internal</p>
                 </div>
             </div>
-            <div class="flex items-center space-x-3">
-                <a href="../index.php" target="_blank" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition flex items-center gap-1">
-                    <i class="fas fa-external-link-alt"></i> Lihat Web Publik
+            
+            <div class="flex items-center space-x-2">
+                <!-- Navigasi Cepat Master Pelanggan -->
+                <a href="pelanggan.php" class="text-xs bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg font-semibold transition flex items-center gap-1.5 shadow-sm">
+                    <i class="fas fa-users"></i> Master Pelanggan
                 </a>
+                
+                <a href="../index.php" target="_blank" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition flex items-center gap-1">
+                    <i class="fas fa-external-link-alt"></i> Web Publik
+                </a>
+                
                 <a href="logout.php" onclick="return confirm('Apakah Anda yakin ingin keluar?')" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition flex items-center gap-1">
                     <i class="fas fa-sign-out-alt"></i> Keluar
                 </a>
@@ -126,16 +141,20 @@ $summary = $summaryStmt->fetch();
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
+        <!-- Header Action -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-2xl font-bold text-gray-800">Ringkasan & Daftar Penjualan</h2>
                 <p class="text-xs text-gray-500">Data berikut menampilkan nama pembeli secara lengkap tanpa sensor.</p>
             </div>
-            <a href="tambah-transaksi.php" class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
-                <i class="fas fa-plus"></i> Tambah Transaksi
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="tambah-transaksi.php" class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                    <i class="fas fa-plus"></i> Tambah Transaksi
+                </a>
+            </div>
         </div>
 
+        <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
@@ -297,6 +316,7 @@ $summary = $summaryStmt->fetch();
                 </table>
             </div>
 
+            <!-- Pagination Bar -->
             <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2 text-xs text-gray-600">
                 <span>Menampilkan <b><?= count($salesData) ?></b> dari total <b><?= $totalRows ?></b> data</span>
                 
