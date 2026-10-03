@@ -2,14 +2,12 @@
 // admin/index.php
 require_once __DIR__ . '/auth.php';
 
-// Handle Action Delete (Bisa hapus Single Item atau Hapus Seluruh Transaksi Tanggal Tersebut)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
     $deleteId = $_POST['id'] ?? null;
     $deleteAllGroup = $_POST['delete_group'] ?? '0';
 
     if ($deleteId) {
         if ($deleteAllGroup === '1') {
-            // Hapus seluruh pesanan atas nama & tanggal yang sama
             $targetStmt = $pdo->prepare("SELECT tgl, nama FROM penjualan WHERE id = ?");
             $targetStmt->execute([$deleteId]);
             $target = $targetStmt->fetch();
@@ -19,7 +17,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $delGroupStmt->execute([$target['tgl'], $target['nama']]);
             }
         } else {
-            // Hapus single item
             $delStmt = $pdo->prepare("DELETE FROM penjualan WHERE id = ?");
             $delStmt->execute([$deleteId]);
         }
@@ -28,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $queryString = http_build_query([
         'year' => $_GET['year'] ?? '',
         'month' => $_GET['month'] ?? '',
+        'status' => $_GET['status'] ?? '',
         'search' => $_GET['search'] ?? '',
         'page' => $_GET['page'] ?? 1
     ]);
@@ -35,15 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// Filter Parameters
 $year   = $_GET['year'] ?? '';
 $month  = $_GET['month'] ?? '';
+$statusFilter = $_GET['status'] ?? '';
 $search = trim($_GET['search'] ?? '');
 $page   = max(1, intval($_GET['page'] ?? 1));
 $limit  = 10;
 $offset = ($page - 1) * $limit;
 
-// Query Construction
 $whereClause = "WHERE 1=1";
 $params = [];
 
@@ -55,6 +52,10 @@ if (!empty($month)) {
     $whereClause .= " AND MONTH(tgl) = :month";
     $params[':month'] = $month;
 }
+if (!empty($statusFilter)) {
+    $whereClause .= " AND status = :status";
+    $params[':status'] = $statusFilter;
+}
 if (!empty($search)) {
     $whereClause .= " AND (nama LIKE :s1 OR instansi LIKE :s2 OR nama_produk LIKE :s3)";
     $params[':s1'] = "%{$search}%";
@@ -62,18 +63,15 @@ if (!empty($search)) {
     $params[':s3'] = "%{$search}%";
 }
 
-// Count Total Rows
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM penjualan {$whereClause}");
 $countStmt->execute($params);
 $totalRows = $countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $limit));
 
-// Fetch Data Penjualan
 $dataStmt = $pdo->prepare("SELECT *, (harga_produk * jumlah) AS total_harga FROM penjualan {$whereClause} ORDER BY tgl DESC, id DESC LIMIT {$limit} OFFSET {$offset}");
 $dataStmt->execute($params);
 $salesData = $dataStmt->fetchAll();
 
-// Hitung jumlah item dalam transaksi yang sama (Multi-Item Indicator)
 $itemCountMap = [];
 if (!empty($salesData)) {
     $keys = array_map(function($r) {
@@ -89,17 +87,45 @@ if (!empty($salesData)) {
     }
 }
 
-// Summary
 $summaryStmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) AS total_revenue, SUM(jumlah) AS total_items, COUNT(*) AS total_trx FROM penjualan {$whereClause}");
 $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch();
 ?>
-<?php include 'include/header.php'; ?>
-<?php include 'include/navigation.php'; ?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin - Dapoer Ela 85</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+    <header class="bg-gray-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-orange-600 p-2 rounded-lg text-white font-bold text-lg">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold leading-tight">Admin Panel - Dapoer Ela 85</h1>
+                    <p class="text-xs text-gray-400">Kelola Seluruh Data Penjualan Internal</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <a href="../index.php" target="_blank" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition flex items-center gap-1">
+                    <i class="fas fa-external-link-alt"></i> Lihat Web Publik
+                </a>
+                <a href="logout.php" onclick="return confirm('Apakah Anda yakin ingin keluar?')" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition flex items-center gap-1">
+                    <i class="fas fa-sign-out-alt"></i> Keluar
+                </a>
+            </div>
+        </div>
+    </header>
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        <!-- Header Action -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-2xl font-bold text-gray-800">Ringkasan & Daftar Penjualan</h2>
@@ -110,7 +136,6 @@ $summary = $summaryStmt->fetch();
             </a>
         </div>
 
-        <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
@@ -125,7 +150,7 @@ $summary = $summaryStmt->fetch();
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Terjual</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= number_format($summary['total_items'] ?? 0, 0, ',', '.') ?> <span class="text-sm font-normal txt-gray-500">pcs</span></h3>
+                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= number_format($summary['total_items'] ?? 0, 0, ',', '.') ?> <span class="text-sm font-normal text-gray-500">pcs</span></h3>
                 </div>
                 <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-xl">
                     <i class="fas fa-box-open"></i>
@@ -146,20 +171,20 @@ $summary = $summaryStmt->fetch();
         <!-- Filter Bar -->
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <form method="GET" class="flex flex-wrap md:flex-nowrap gap-3 items-end">
-                <div class="w-full md:w-36">
+                <div class="w-full md:w-32">
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Tahun</label>
                     <select name="year" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
-                        <option value="">Semua Tahun</option>
+                        <option value="">Semua</option>
                         <?php for ($y = 2024; $y <= 2027; $y++): ?>
                             <option value="<?= $y ?>" <?= $year == $y ? 'selected' : '' ?>><?= $y ?></option>
                         <?php endfor; ?>
                     </select>
                 </div>
 
-                <div class="w-full md:w-44">
+                <div class="w-full md:w-36">
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Bulan</label>
                     <select name="month" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
-                        <option value="">Semua Bulan</option>
+                        <option value="">Semua</option>
                         <?php 
                         $months = [1=>'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
                         foreach ($months as $mNum => $mName): 
@@ -169,10 +194,19 @@ $summary = $summaryStmt->fetch();
                     </select>
                 </div>
 
+                <div class="w-full md:w-36">
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+                    <select name="status" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <option value="">Semua Status</option>
+                        <option value="lunas" <?= $statusFilter === 'lunas' ? 'selected' : '' ?>>Lunas</option>
+                        <option value="belum lunas" <?= $statusFilter === 'belum lunas' ? 'selected' : '' ?>>Belum Lunas</option>
+                    </select>
+                </div>
+
                 <div class="w-full md:flex-1">
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Pencarian</label>
                     <div class="relative">
-                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari nama pembeli, instansi, produk..." class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari nama, instansi, produk..." class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
                         <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
                     </div>
                 </div>
@@ -181,7 +215,7 @@ $summary = $summaryStmt->fetch();
                     <button type="submit" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1">
                         <i class="fas fa-filter text-xs"></i> Filter
                     </button>
-                    <?php if ($year || $month || $search): ?>
+                    <?php if ($year || $month || $statusFilter || $search): ?>
                         <a href="index.php" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm transition flex items-center gap-1">
                             Reset
                         </a>
@@ -204,13 +238,14 @@ $summary = $summaryStmt->fetch();
                             <th class="py-3.5 px-4 text-right">Harga</th>
                             <th class="py-3.5 px-4 text-center">Jumlah</th>
                             <th class="py-3.5 px-4 text-right">Total</th>
+                            <th class="py-3.5 px-4 text-center">Status</th>
                             <th class="py-3.5 px-4 text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
                         <?php if (empty($salesData)): ?>
                             <tr>
-                                <td colspan="9" class="text-center py-8 text-gray-400">
+                                <td colspan="10" class="text-center py-8 text-gray-400">
                                     <i class="fas fa-folder-open text-3xl mb-2 block"></i>
                                     Tidak ada data penjualan yang ditemukan.
                                 </td>
@@ -226,7 +261,7 @@ $summary = $summaryStmt->fetch();
                                     <td class="py-3 px-4 font-bold text-gray-900">
                                         <?= htmlspecialchars($row['nama']) ?>
                                         <?php if ($groupCount > 1): ?>
-                                            <span class="inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-orange-100 text-orange-700 font-medium rounded" title="<?= $groupCount ?> produk pada tanggal ini">
+                                            <span class="inline-block ml-1 px-1.5 py-0.5 text-[10px] bg-orange-100 text-orange-700 font-medium rounded">
                                                 <?= $groupCount ?> Item
                                             </span>
                                         <?php endif; ?>
@@ -236,18 +271,21 @@ $summary = $summaryStmt->fetch();
                                     <td class="py-3 px-4 text-right"><?= formatRupiah($row['harga_produk']) ?></td>
                                     <td class="py-3 px-4 text-center font-semibold"><?= $row['jumlah'] ?></td>
                                     <td class="py-3 px-4 text-right font-bold text-orange-600"><?= formatRupiah($row['total_harga']) ?></td>
+                                    <td class="py-3 px-4 text-center whitespace-nowrap">
+                                        <?= renderStatusBadge($row['status'] ?? 'lunas') ?>
+                                    </td>
                                     <td class="py-3 px-4 text-center whitespace-nowrap space-x-1">
-                                        <a href="detail-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block" title="Lihat Detail & Riwayat">
+                                        <a href="detail-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block">
                                             <i class="fas fa-eye text-blue-600"></i>
                                         </a>
-                                        <a href="edit-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block" title="Edit Multi-Produk Transaksi Ini">
+                                        <a href="edit-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block">
                                             <i class="fas fa-edit text-amber-600"></i>
                                         </a>
                                         <form method="POST" class="inline-block" onsubmit="return confirmDelete(<?= $row['id'] ?>, '<?= htmlspecialchars($row['nama']) ?>', <?= $groupCount ?>);">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= $row['id'] ?>">
                                             <input type="hidden" name="delete_group" id="delete_group_<?= $row['id'] ?>" value="0">
-                                            <button type="submit" class="bg-gray-100 hover:bg-red-50 text-red-600 p-2 rounded-lg text-xs transition" title="Hapus Data">
+                                            <button type="submit" class="bg-gray-100 hover:bg-red-50 text-red-600 p-2 rounded-lg text-xs transition">
                                                 <i class="fas fa-trash-alt"></i>
                                             </button>
                                         </form>
@@ -259,7 +297,6 @@ $summary = $summaryStmt->fetch();
                 </table>
             </div>
 
-            <!-- Pagination -->
             <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2 text-xs text-gray-600">
                 <span>Menampilkan <b><?= count($salesData) ?></b> dari total <b><?= $totalRows ?></b> data</span>
                 
@@ -296,5 +333,5 @@ $summary = $summaryStmt->fetch();
             return confirm('Apakah Anda yakin ingin menghapus baris transaksi #' + id + '?');
         }
     </script>
-    
-<?php include 'include/footer.php'; ?>
+</body>
+</html>
