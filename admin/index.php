@@ -94,39 +94,7 @@ $summaryStmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) AS total_revenue
 $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch();
 ?>
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Admin - Dapoer Ela 85</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50 text-gray-800 font-sans antialiased">
-
-    <!-- Top Navigation Bar -->
-    <header class="bg-gray-900 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                <div class="bg-orange-600 p-2 rounded-lg text-white font-bold text-lg">
-                    <i class="fas fa-user-shield"></i>
-                </div>
-                <div>
-                    <h1 class="text-lg font-bold leading-tight">Admin Panel - Dapoer Ela 85</h1>
-                    <p class="text-xs text-gray-400">Kelola Seluruh Data Penjualan Internal</p>
-                </div>
-            </div>
-            <div class="flex items-center space-x-3">
-                <a href="../index.php" target="_blank" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition flex items-center gap-1">
-                    <i class="fas fa-external-link-alt"></i> Lihat Web Publik
-                </a>
-                <a href="logout.php" onclick="return confirm('Apakah Anda yakin ingin keluar?')" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition flex items-center gap-1">
-                    <i class="fas fa-sign-out-alt"></i> Keluar
-                </a>
-            </div>
-        </div>
-    </header>
+<?php include 'include/header.php'; ?>
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
@@ -156,7 +124,7 @@ $summary = $summaryStmt->fetch();
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Terjual</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= number_format($summary['total_items'] ?? 0, 0, ',', '.') ?> <span class="text-sm font-normal text-gray-500">pcs</span></h3>
+                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= number_format($summary['total_items'] ?? 0, 0, ',', '.') ?> <span class="text-sm font-normal txt-gray-500">pcs</span></h3>
                 </div>
                 <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-xl">
                     <i class="fas fa-box-open"></i>
