@@ -8,7 +8,6 @@ if (!$id) {
     exit;
 }
 
-// 1. Ambil data transaksi acuan
 $stmt =$pdo->prepare("SELECT * FROM penjualan WHERE id = ?");
 $stmt->execute([$id]);
 $trxData =$stmt->fetch();
@@ -17,7 +16,6 @@ if (!$trxData) {
     die("Data transaksi tidak ditemukan.");
 }
 
-// 2. Ambil semua produk milik pembeli & tanggal yang sama
 $itemsStmt =$pdo->prepare("SELECT * FROM penjualan WHERE tgl = ? AND nama = ? ORDER BY id ASC");
 $itemsStmt->execute([$trxData['tgl'],$trxData['nama']]);
 $itemsList =$itemsStmt->fetchAll();
@@ -26,11 +24,11 @@ if (empty($itemsList)) {
     $itemsList = [$trxData];
 }
 
-// 3. Proses Update Multi-Produk (POST Request)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tgl =$_POST['tgl'];
     $nama =$_POST['nama'];
     $instansi =$_POST['instansi'] ?? '';
+    $status =$_POST['status'] ?? 'lunas';
 
     $item_ids =$_POST['item_id'] ?? [];
     $nama_produk_list =$_POST['nama_produk'] ?? [];
@@ -40,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $existingIds = array_column($itemsList, 'id');
     $submittedIds = array_filter($item_ids);
 
-    // Hapus item produk yang dibuang dari baris oleh admin
     $idsToDelete = array_diff($existingIds,$submittedIds);
     if (!empty($idsToDelete)) {
         $inClause = implode(',', array_fill(0, count($idsToDelete), '?'));
@@ -48,21 +45,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deleteStmt->execute(array_values($idsToDelete));
     }
 
-    // Loop untuk Update / Insert Item Produk
-    $updateStmt =$pdo->prepare("UPDATE penjualan SET tgl=?, nama=?, instansi=?, nama_produk=?, harga_produk=?, jumlah=? WHERE id=?");
-    $insertStmt =$pdo->prepare("INSERT INTO penjualan (tgl, nama, instansi, nama_produk, harga_produk, jumlah) VALUES (?, ?, ?, ?, ?, ?)");
+    $updateStmt =$pdo->prepare("UPDATE penjualan SET tgl=?, nama=?, instansi=?, nama_produk=?, harga_produk=?, jumlah=?, status=? WHERE id=?");
+    $insertStmt =$pdo->prepare("INSERT INTO penjualan (tgl, nama, instansi, nama_produk, harga_produk, jumlah, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
     for ($i = 0; $i < count($nama_produk_list); $i++) {$itemId = !empty($item_ids[$i]) ? intval($item_ids[$i]) : null;
         $produk = trim($nama_produk_list[$i]);
         $harga  = floatval($harga_produk_list[$i]);$jumlah = intval($jumlah_list[$i]);
 
         if (!empty($produk) && $harga >= 0 &&$jumlah > 0) {
-            if ($itemId && in_array($itemId,$existingIds)) {
-                // Update item lama
-                $updateStmt->execute([$tgl, $nama,$instansi, $produk,$harga, $jumlah,$itemId]);
+            if ($itemId && in_array($itemId, $existingIds)) {$updateStmt->execute([$tgl,$nama, $instansi,$produk, $harga,$jumlah, $status,$itemId]);
             } else {
-                // Insert item baru yang ditambahkan di form edit
-                $insertStmt->execute([$tgl,$nama, $instansi,$produk, $harga,$jumlah]);
+                $insertStmt->execute([$tgl, $nama,$instansi, $produk,$harga, $jumlah,$status]);
             }
         }
     }
@@ -88,8 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <form method="POST" class="space-y-4">
-            <!-- Data Pembeli & Tanggal -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Tanggal</label>
                     <input type="date" name="tgl" value="<?= htmlspecialchars($trxData['tgl']) ?>" required class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
@@ -102,11 +94,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Instansi</label>
                     <input type="text" name="instansi" value="<?= htmlspecialchars($trxData['instansi'] ?? '') ?>" placeholder="Puskesmas Melati" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
                 </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                    <select name="status" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                        <option value="lunas" <?= (strtolower($trxData['status'] ?? '') === 'lunas') ? 'selected' : '' ?> class="text-emerald-600 font-semibold">Lunas</option>
+                        <option value="belum lunas" <?= (strtolower($trxData['status'] ?? '') === 'belum lunas') ? 'selected' : '' ?> class="text-rose-600 font-semibold">Belum Lunas</option>
+                    </select>
+                </div>
             </div>
 
             <hr class="my-4 border-gray-100">
 
-            <!-- Container Produk Dinamis -->
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
                     <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">Daftar Produk / Pesanan</label>
@@ -117,7 +115,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div id="product-container" class="space-y-3">
                     <?php foreach ($itemsList as$item): ?>
-                        <!-- Baris Produk Existing -->
                         <div class="product-row bg-gray-50 p-3 rounded-lg border border-gray-200 relative grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             <input type="hidden" name="item_id[]" value="<?= htmlspecialchars($item['id']) ?>">
                             
@@ -143,7 +140,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
-            <!-- Tombol Aksi -->
             <div class="flex gap-2 pt-4">
                 <a href="index.php" class="px-4 py-2 border rounded-lg text-sm text-center flex-1 text-gray-600 hover:bg-gray-100 transition">Batal</a>
                 <button type="submit" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold flex-1 hover:bg-orange-700 transition">Simpan Perubahan</button>
@@ -151,7 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 
-    <!-- Script JavaScript untuk Tambah/Hapus Baris Produk secara Dinamis -->
     <script>
         function addProductRow() {
             const container = document.getElementById('product-container');
@@ -185,8 +180,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         function removeProductRow(button) {
             const container = document.getElementById('product-container');
             const rows = container.getElementsByClassName('product-row');
-            
-            // Minimal menyisakan 1 baris
             if (rows.length > 1) {
                 button.closest('.product-row').remove();
             } else {
