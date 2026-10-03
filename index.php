@@ -42,13 +42,13 @@ $salesData = $dataStmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Daftar Penjualan - Dapoer Ela 85</title>
+    <title>Dapoer Ela 85</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-800 p-6">
     <div class="max-w-6xl mx-auto space-y-6">
         <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <h1 class="text-xl font-bold text-orange-600">Dapoer Ela 85 - Laporan Penjualan</h1>
+            <h1 class="text-xl font-bold text-orange-600">Dapoer Ela 85</h1>
             
             <?php 
             $isLoggedIn = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
