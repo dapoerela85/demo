@@ -2,8 +2,8 @@
 // admin/pelanggan.php
 require_once __DIR__ . '/auth.php';
 
-$message = '';
-$error = '';
+$message = $_GET['msg'] ?? '';
+$error   = $_GET['err'] ?? '';
 
 // 1. Handle Form Submissions (Create, Update, Delete)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -18,11 +18,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status   = $_POST['status'] ?? 'aktif';
 
         if (!empty($nama)) {
+            // Cek duplikasi pelanggan berdasarkan Nama dan No Telp (opsional)
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE nama = ? AND (no_telp = ? AND no_telp != '')");
+            $checkStmt->execute([$nama, $no_telp]);
+            $isDuplicate = $checkStmt->fetchColumn() > 0;
+
+            if ($isDuplicate) {
+                header("Location: pelanggan.php?err=" . urlencode('Pelanggan dengan nama dan nomor telepon tersebut sudah terdaftar!'));
+                exit;
+            }
+
             $stmt = $pdo->prepare("INSERT INTO pelanggan (nama, nik_ktp, no_telp, instansi, alamat, status) VALUES (?, ?, ?, ?, ?, ?)");
             $stmt->execute([$nama, $nik_ktp ?: null, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status]);
-            $message = 'Data pelanggan berhasil ditambahkan.';
+
+            // Redirect (PRG Pattern) untuk mencegah form resubmission / dobel input
+            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil ditambahkan.'));
+            exit;
         } else {
-            $error = 'Nama pelanggan wajib diisi!';
+            header("Location: pelanggan.php?err=" . urlencode('Nama pelanggan wajib diisi!'));
+            exit;
         }
 
     } elseif ($action === 'update') {
@@ -37,28 +51,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($id > 0 && !empty($nama)) {
             $stmt = $pdo->prepare("UPDATE pelanggan SET nama=?, nik_ktp=?, no_telp=?, instansi=?, alamat=?, status=? WHERE id=?");
             $stmt->execute([$nama, $nik_ktp ?: null, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status, $id]);
-            $message = 'Data pelanggan berhasil diperbarui.';
+
+            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil diperbarui.'));
+            exit;
         } else {
-            $error = 'ID tidak valid atau nama pelanggan kosong!';
+            header("Location: pelanggan.php?err=" . urlencode('ID tidak valid atau nama pelanggan kosong!'));
+            exit;
         }
 
     } elseif ($action === 'delete') {
         $id = intval($_POST['id'] ?? 0);
         if ($id > 0) {
-            // Cek apakah ada transaksi terkait
             $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM penjualan WHERE pelanggan_id = ?");
             $checkStmt->execute([$id]);
             $count = $checkStmt->fetchColumn();
 
             if ($count > 0) {
-                // Set status non-aktif jika pelanggan sudah memiliki riwayat transaksi
                 $stmt = $pdo->prepare("UPDATE pelanggan SET status = 'non-aktif' WHERE id = ?");
                 $stmt->execute([$id]);
-                $message = 'Pelanggan memiliki transaksi aktif. Status diubah menjadi non-aktif.';
+                header("Location: pelanggan.php?msg=" . urlencode('Pelanggan memiliki riwayat transaksi. Status diubah menjadi non-aktif.'));
+                exit;
             } else {
                 $stmt = $pdo->prepare("DELETE FROM pelanggan WHERE id = ?");
                 $stmt->execute([$id]);
-                $message = 'Data pelanggan berhasil dihapus secara permanen.';
+                header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil dihapus secara permanen.'));
+                exit;
             }
         }
     }
@@ -293,7 +310,7 @@ $pelangganList = $dataStmt->fetchAll();
                 <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
             </div>
             
-            <form method="POST" class="p-5 space-y-4">
+            <form method="POST" id="pelangganForm" onsubmit="preventDoubleSubmit(this)" class="p-5 space-y-4">
                 <input type="hidden" name="action" id="formAction" value="create">
                 <input type="hidden" name="id" id="formId" value="">
 
@@ -334,17 +351,21 @@ $pelangganList = $dataStmt->fetchAll();
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
                     <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">Batal</button>
-                    <button type="submit" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition">Simpan Data</button>
+                    <button type="submit" id="btnSubmit" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition">Simpan Data</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Script JavaScript modal handler -->
+    <!-- Script JavaScript modal handler & double-submit prevention -->
     <script>
         function openModal(mode, data = null) {
             const modal = document.getElementById('pelangganModal');
             document.getElementById('formAction').value = mode;
+
+            const btnSubmit = document.getElementById('btnSubmit');
+            btnSubmit.disabled = false;
+            btnSubmit.innerText = "Simpan Data";
 
             if (mode === 'create') {
                 document.getElementById('modalTitle').innerText = 'Tambah Pelanggan Baru';
@@ -374,6 +395,13 @@ $pelangganList = $dataStmt->fetchAll();
             const modal = document.getElementById('pelangganModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        // Mencegah klik dobel pada tombol submit
+        function preventDoubleSubmit(form) {
+            const btnSubmit = document.getElementById('btnSubmit');
+            btnSubmit.disabled = true;
+            btnSubmit.innerText = "Menyimpan...";
         }
     </script>
 </body>
