@@ -1,5 +1,6 @@
 <?php
-require_once '../auth.php';
+// admin/index.php
+require_once __DIR__ . '/auth.php';
 
 // Handle Action Delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete') {
@@ -9,7 +10,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $delStmt->execute([$deleteId]);
     }
     
-    // Redirect untuk menghindari resubmission form
     $queryString = http_build_query([
         'year' => $_GET['year'] ?? '',
         'month' => $_GET['month'] ?? '',
@@ -28,7 +28,7 @@ $page   = max(1, intval($_GET['page'] ?? 1));
 $limit  = 10;
 $offset = ($page - 1) * $limit;
 
-// Where Clause Construction
+// Query Construction
 $whereClause = "WHERE 1=1";
 $params = [];
 
@@ -53,12 +53,12 @@ $countStmt->execute($params);
 $totalRows = $countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $limit));
 
-// Fetch Data Admin (Nama Asli)
+// Fetch Data
 $dataStmt = $pdo->prepare("SELECT *, (harga_produk * jumlah) AS total_harga FROM penjualan {$whereClause} ORDER BY tgl DESC, id DESC LIMIT {$limit} OFFSET {$offset}");
 $dataStmt->execute($params);
 $salesData = $dataStmt->fetchAll();
 
-// Calculate Summary Cards
+// Summary
 $summaryStmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) AS total_revenue, SUM(jumlah) AS total_items, COUNT(*) AS total_trx FROM penjualan {$whereClause}");
 $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch();
@@ -74,7 +74,7 @@ $summary = $summaryStmt->fetch();
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
 
-    <!-- Top Header Navigation -->
+    <!-- Top Navigation Bar -->
     <header class="bg-gray-900 text-white shadow-md">
         <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center space-x-3">
@@ -99,7 +99,7 @@ $summary = $summaryStmt->fetch();
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        <!-- Top Action & Title Bar -->
+        <!-- Header Action -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-2xl font-bold text-gray-800">Ringkasan & Daftar Penjualan</h2>
@@ -110,12 +110,12 @@ $summary = $summaryStmt->fetch();
             </a>
         </div>
 
-        <!-- KPI Summary Cards -->
+        <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Pendapatan</p>
-                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= formatRupiah($summary['total_revenue']) ?></h3>
+                    <h3 class="text-2xl font-bold text-gray-800 mt-1"><?= formatRupiah($summary['total_revenue'] ?? 0) ?></h3>
                 </div>
                 <div class="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-lg flex items-center justify-center text-xl">
                     <i class="fas fa-wallet"></i>
@@ -190,7 +190,7 @@ $summary = $summaryStmt->fetch();
             </form>
         </div>
 
-        <!-- Table Data Penjualan Admin -->
+        <!-- Table Data -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
@@ -227,16 +227,13 @@ $summary = $summaryStmt->fetch();
                                     <td class="py-3 px-4 text-center font-semibold"><?= $row['jumlah'] ?></td>
                                     <td class="py-3 px-4 text-right font-bold text-orange-600"><?= formatRupiah($row['total_harga']) ?></td>
                                     <td class="py-3 px-4 text-center whitespace-nowrap space-x-1">
-                                        <!-- Tombol Detail / Riwayat Pembeli -->
-                                        <a href="detail-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block" title="Lihat Detail & Riwayat Pembeli">
+                                        <a href="detail-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block" title="Lihat Detail & Riwayat">
                                             <i class="fas fa-eye text-blue-600"></i>
                                         </a>
-                                        <!-- Tombol Edit -->
                                         <a href="edit-transaksi.php?id=<?= $row['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg text-xs transition inline-block" title="Edit Transaksi">
                                             <i class="fas fa-edit text-amber-600"></i>
                                         </a>
-                                        <!-- Tombol Delete -->
-                                        <form method="POST" class="inline-block" onsubmit="return confirm('Apakah Anda yakin ingin menghapus transaksi #<?= $row['id'] ?> (<?= htmlspecialchars($row['nama_produk']) ?>)?');">
+                                        <form method="POST" class="inline-block" onsubmit="return confirm('Apakah Anda yakin ingin menghapus transaksi #<?= $row['id'] ?>?');">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= $row['id'] ?>">
                                             <button type="submit" class="bg-gray-100 hover:bg-red-50 text-red-600 p-2 rounded-lg text-xs transition" title="Hapus Data">
