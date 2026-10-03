@@ -327,5 +327,5 @@ $summary = $summaryStmt->fetch();
             return confirm('Apakah Anda yakin ingin menghapus baris transaksi #' + id + '?');
         }
     </script>
-</body>
-</html>
+    
+<?php include 'include/footer.php'; ?>
