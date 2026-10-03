@@ -9,7 +9,7 @@ $db_host = 'db.fr-roub1.bengt.wasmernet.com';
 $db_port = '20184';
 $db_name = 'dapoerela85_db';
 $db_user = 'user_53b82568';
-$db_pass = ''; // Insert your database password here
+$db_pass = 'pw_Ia6e5i9rEcpczY7FbmbNPrgIId49MZah'; // Insert your database password here
 
 try {
     $dsn = "mysql:host={$db_host};port={$db_port};dbname={$db_name};charset=utf8mb4";
