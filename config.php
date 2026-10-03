@@ -41,4 +41,12 @@ if (!function_exists('formatRupiah')) {
         return 'Rp ' . number_format($amount ?? 0, 0, ',', '.');
     }
 }
+
+// Helper badge status
+function renderStatusBadge($status) {
+    if (strtolower($status) === 'lunas') {
+        return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800"><i class="fas fa-check-circle mr-1"></i> Lunas</span>';
+    }
+    return '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"><i class="fas fa-clock mr-1"></i> Belum Lunas</span>';
+}
 ?>
