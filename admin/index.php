@@ -95,6 +95,7 @@ $summaryStmt->execute($params);
 $summary = $summaryStmt->fetch();
 ?>
 <?php include 'include/header.php'; ?>
+<?php include 'include/navigation.php'; ?>
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
