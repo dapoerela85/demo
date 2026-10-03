@@ -1,12 +1,12 @@
 <?php
-require_once '../config.php';
+// admin/login.php
+require_once __DIR__ . '/../config.php';
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = $_POST['username'] ?? '';
     $password = $_POST['password'] ?? '';
 
-    // Credential Admin Sederhana
     if ($username === 'admin' && $password === 'admin123') {
         $_SESSION['admin_logged_in'] = true;
         header('Location: index.php');
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="bg-white p-8 rounded-xl shadow-md w-full max-w-sm">
         <h2 class="text-xl font-bold text-center text-gray-800 mb-6">Login Panel Admin</h2>
         <?php if ($error): ?>
-            <div class="bg-red-100 text-red-600 p-3 rounded-lg text-xs mb-4"><?= $error ?></div>
+            <div class="bg-red-100 text-red-600 p-3 rounded-lg text-xs mb-4"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         <form method="POST" class="space-y-4">
             <div>

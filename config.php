@@ -1,6 +1,12 @@
 <?php
 // config.php
-session_start();
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 $db_host = 'db.fr-roub1.bengt.wasmernet.com';
 $db_port = '20184';
@@ -18,19 +24,21 @@ try {
     die("Koneksi Database Gagal: " . $e->getMessage());
 }
 
-// Fungsi Sensor / Masking Nama (Publik)
-function maskName($name) {
-    $words = explode(' ', trim($name));
-    $maskedWords = array_map(function($word) {
-        $length = mb_strlen($word);
-        if ($length <= 1) return $word;
-        return mb_substr($word, 0, 1) . str_repeat('*', max(3, $length - 1));
-    }, $words);
-    return implode(' ', $maskedWords);
+if (!function_exists('maskName')) {
+    function maskName($name) {
+        $words = explode(' ', trim($name ?? ''));
+        $maskedWords = array_map(function($word) {
+            $length = mb_strlen($word);
+            if ($length <= 1) return $word;
+            return mb_substr($word, 0, 1) . str_repeat('*', max(3, $length - 1));
+        }, $words);
+        return implode(' ', $maskedWords);
+    }
 }
 
-// Helper Format Rupiah
-function formatRupiah($amount) {
-    return 'Rp ' . number_format($amount ?? 0, 0, ',', '.');
+if (!function_exists('formatRupiah')) {
+    function formatRupiah($amount) {
+        return 'Rp ' . number_format($amount ?? 0, 0, ',', '.');
+    }
 }
 ?>
