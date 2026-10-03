@@ -58,7 +58,7 @@ $salesData = $dataStmt->fetchAll();
                 echo '<a href="admin/index.php" class="text-xs font-semibold bg-orange-600 text-white px-3 py-2 rounded-lg hover:bg-orange-700 transition">Admin Panel</a>';
             } elseif (!$isLoggedIn) {
                 // Tampilan jika admin BELUM login (menggunakan elseif)
-                echo '<a href="admin/login.php" class="text-xs font-semibold bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900 transition">Login Admin</a>';
+                echo '<a href="admin/login.php" class="text-xs font-semibold bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900 transition">Login</a>';
             }
             ?>
         </div>
