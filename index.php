@@ -49,7 +49,18 @@ $salesData = $dataStmt->fetchAll();
     <div class="max-w-6xl mx-auto space-y-6">
         <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <h1 class="text-xl font-bold text-orange-600">Dapoer Ela 85 - Laporan Penjualan</h1>
-            <a href="admin/login.php" class="text-xs font-semibold bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900">Area Admin</a>
+            
+            <?php 
+            $isLoggedIn = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+
+            if ($isLoggedIn) {
+                // Tampilan jika admin SUDAH login
+                echo '<a href="admin/index.php" class="text-xs font-semibold bg-orange-600 text-white px-3 py-2 rounded-lg hover:bg-orange-700 transition">Admin Panel</a>';
+            } elseif (!$isLoggedIn) {
+                // Tampilan jika admin BELUM login (menggunakan elseif)
+                echo '<a href="admin/login.php" class="text-xs font-semibold bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-900 transition">Login Admin</a>';
+            }
+            ?>
         </div>
 
         <!-- Filter Bar -->
