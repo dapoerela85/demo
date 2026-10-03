@@ -1,5 +1,5 @@
 <?php
-require_once '../auth.php';
+require_once __DIR__ . '/auth.php';
 
 $id = $_GET['id'] ?? null;
 if (!$id) {
