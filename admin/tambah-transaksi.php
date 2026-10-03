@@ -3,24 +3,31 @@
 require_once __DIR__ . '/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $tgl =$_POST['tgl'];
-    $nama =$_POST['nama'];
-    $instansi =$_POST['instansi'] ?? '';
+    $tgl = $_POST['tgl'];
+    $nama = $_POST['nama'];
+    $instansi = $_POST['instansi'] ?? '';
+    $status = $_POST['status'] ?? 'lunas';
 
-    $nama_produk_list =$_POST['nama_produk'] ?? [];
-    $harga_produk_list =$_POST['harga_produk'] ?? [];
-    $jumlah_list =$_POST['jumlah'] ?? [];
+    $nama_produk_list = $_POST['nama_produk'] ?? [];
+    $harga_produk_list = $_POST['harga_produk'] ?? [];
+    $jumlah_list = $_POST['jumlah'] ?? [];
 
-    $stmt =$pdo->prepare("INSERT INTO penjualan (tgl, nama, instansi, nama_produk, harga_produk, jumlah) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt = $pdo->prepare("INSERT INTO penjualan (tgl, nama, instansi, nama_produk, harga_produk, jumlah, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
 
-    // Perulangan untuk menyimpan setiap baris produk
-    for ($i = 0; $i < count($nama_produk_list); $i++) {$produk = trim($nama_produk_list[$i]);
-        $harga = floatval($harga_produk_list[$i]);$jumlah = intval($jumlah_list[$i]);
+    for ($i = 0; $i < count($nama_produk_list); $i++) {
+        $produk = trim($nama_produk_list[$i]);
+        $harga = floatval($harga_produk_list[$i]);
+        $jumlah = intval($jumlah_list[$i]);
 
-        if (!empty($produk) &&$harga >= 0 && $jumlah > 0) {$stmt->execute([
-                $tgl,$nama,
-                $instansi,$produk,
-                $harga,$jumlah
+        if (!empty($produk) && $harga >= 0 && $jumlah > 0) {
+            $stmt->execute([
+                $tgl,
+                $nama,
+                $instansi,
+                $produk,
+                $harga,
+                $jumlah,
+                $status
             ]);
         }
     }
@@ -43,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h2 class="text-lg font-bold mb-4 text-gray-800">Tambah Transaksi Baru</h2>
         
         <form method="POST" class="space-y-4">
-            <!-- Data Pembeli & Tanggal -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <!-- Data Pembeli & Tanggal & Status -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Tanggal</label>
                     <input type="date" name="tgl" value="<?= date('Y-m-d') ?>" required class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
@@ -56,6 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Instansi</label>
                     <input type="text" name="instansi" placeholder="Puskesmas Melati" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                    <select name="status" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                        <option value="lunas" class="text-emerald-600 font-semibold">Lunas</option>
+                        <option value="belum lunas" class="text-rose-600 font-semibold">Belum Lunas</option>
+                    </select>
                 </div>
             </div>
 
@@ -71,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <div id="product-container" class="space-y-3">
-                    <!-- Baris Produk Pertama -->
                     <div class="product-row bg-gray-50 p-3 rounded-lg border border-gray-200 relative grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                         <div class="md:col-span-5">
                             <label class="block text-xs font-semibold text-gray-600 mb-1">Nama Produk</label>
@@ -102,7 +115,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 
-    <!-- Script JavaScript untuk Tambah/Hapus Baris Produk secara Dinamis -->
     <script>
         function addProductRow() {
             const container = document.getElementById('product-container');
@@ -135,8 +147,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         function removeProductRow(button) {
             const container = document.getElementById('product-container');
             const rows = container.getElementsByClassName('product-row');
-            
-            // Minimal menyisakan 1 baris
             if (rows.length > 1) {
                 button.closest('.product-row').remove();
             } else {
