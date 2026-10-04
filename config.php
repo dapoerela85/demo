@@ -4,7 +4,19 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Set durasi session menjadi 30 hari (2.592.000 detik) agar tidak logout otomatis
+$session_lifetime = 2592000; 
+
+ini_set('session.gc_maxlifetime', $session_lifetime);
+ini_set('session.cookie_lifetime', $session_lifetime);
+
 if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params([
+        'lifetime' => $session_lifetime,
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
     session_start();
 }
 
@@ -51,7 +63,6 @@ if (!function_exists('renderStatusBadge')) {
     }
 }
 
-// Helper Sinkronisasi Total Belanja Pelanggan
 function syncTotalPelanggan($pdo, $pelanggan_id) {
     if (!$pelanggan_id) return;
     $stmt = $pdo->prepare("SELECT SUM(harga_produk * jumlah) FROM penjualan WHERE pelanggan_id = ?");
