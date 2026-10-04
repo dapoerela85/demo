@@ -251,7 +251,7 @@ $summary = $summaryStmt->fetch();
                         <tr>
                             <th class="py-3.5 px-4">ID</th>
                             <th class="py-3.5 px-4">Tanggal</th>
-                            <th class="py-3.5 px-4">Nama Pembeli (Asli)</th>
+                            <th class="py-3.5 px-4">Nama Pelanggan</th>
                             <th class="py-3.5 px-4">Instansi</th>
                             <th class="py-3.5 px-4">Produk</th>
                             <th class="py-3.5 px-4 text-right">Harga</th>
