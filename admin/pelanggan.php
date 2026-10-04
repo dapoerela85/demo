@@ -5,6 +5,16 @@ require_once __DIR__ . '/auth.php';
 $message = $_GET['msg'] ?? '';
 $error   = $_GET['err'] ?? '';
 
+// Helper Generate PIN 6 Digit Unik
+function generateUniquePin($pdo) {
+    do {
+        $pin = str_pad(mt_rand(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE pin = ?");
+        $stmt->execute([$pin]);
+    } while ($stmt->fetchColumn() > 0);
+    return $pin;
+}
+
 // 1. Handle Form Submissions (Create, Update, Delete)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -16,23 +26,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $instansi = trim($_POST['instansi'] ?? '');
         $alamat   = trim($_POST['alamat'] ?? '');
         $status   = $_POST['status'] ?? 'aktif';
+        $pin      = trim($_POST['pin'] ?? '');
+
+        if (empty($pin) || strlen($pin) !== 6) {
+            $pin = generateUniquePin($pdo);
+        }
 
         if (!empty($nama)) {
-            // Cek duplikasi pelanggan berdasarkan Nama dan No Telp (opsional)
             $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE nama = ? AND (no_telp = ? AND no_telp != '')");
             $checkStmt->execute([$nama, $no_telp]);
-            $isDuplicate = $checkStmt->fetchColumn() > 0;
 
-            if ($isDuplicate) {
+            if ($checkStmt->fetchColumn() > 0) {
                 header("Location: pelanggan.php?err=" . urlencode('Pelanggan dengan nama dan nomor telepon tersebut sudah terdaftar!'));
                 exit;
             }
 
-            $stmt = $pdo->prepare("INSERT INTO pelanggan (nama, nik_ktp, no_telp, instansi, alamat, status) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$nama, $nik_ktp ?: null, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status]);
+            $stmt = $pdo->prepare("INSERT INTO pelanggan (nama, nik_ktp, pin, no_telp, instansi, alamat, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$nama, $nik_ktp ?: null, $pin, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status]);
 
-            // Redirect (PRG Pattern) untuk mencegah form resubmission / dobel input
-            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil ditambahkan.'));
+            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil ditambahkan dengan PIN: ' . $pin));
             exit;
         } else {
             header("Location: pelanggan.php?err=" . urlencode('Nama pelanggan wajib diisi!'));
@@ -47,10 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $instansi = trim($_POST['instansi'] ?? '');
         $alamat   = trim($_POST['alamat'] ?? '');
         $status   = $_POST['status'] ?? 'aktif';
+        $pin      = trim($_POST['pin'] ?? '');
+
+        if (empty($pin) || strlen($pin) !== 6) {
+            $pin = generateUniquePin($pdo);
+        }
 
         if ($id > 0 && !empty($nama)) {
-            $stmt = $pdo->prepare("UPDATE pelanggan SET nama=?, nik_ktp=?, no_telp=?, instansi=?, alamat=?, status=? WHERE id=?");
-            $stmt->execute([$nama, $nik_ktp ?: null, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status, $id]);
+            $stmt = $pdo->prepare("UPDATE pelanggan SET nama=?, nik_ktp=?, pin=?, no_telp=?, instansi=?, alamat=?, status=? WHERE id=?");
+            $stmt->execute([$nama, $nik_ktp ?: null, $pin, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status, $id]);
 
             header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil diperbarui.'));
             exit;
@@ -64,9 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($id > 0) {
             $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM penjualan WHERE pelanggan_id = ?");
             $checkStmt->execute([$id]);
-            $count = $checkStmt->fetchColumn();
 
-            if ($count > 0) {
+            if ($checkStmt->fetchColumn() > 0) {
                 $stmt = $pdo->prepare("UPDATE pelanggan SET status = 'non-aktif' WHERE id = ?");
                 $stmt->execute([$id]);
                 header("Location: pelanggan.php?msg=" . urlencode('Pelanggan memiliki riwayat transaksi. Status diubah menjadi non-aktif.'));
@@ -88,7 +104,6 @@ $page         = max(1, intval($_GET['page'] ?? 1));
 $limit        = 10;
 $offset       = ($page - 1) * $limit;
 
-// 3. Query Construction
 $whereClause = "WHERE 1=1";
 $params = [];
 
@@ -98,20 +113,18 @@ if (!empty($statusFilter)) {
 }
 
 if (!empty($search)) {
-    $whereClause .= " AND (p.nama LIKE :s1 OR p.nik_ktp LIKE :s2 OR p.no_telp LIKE :s3 OR p.instansi LIKE :s4)";
+    $whereClause .= " AND (p.nama LIKE :s1 OR p.pin LIKE :s2 OR p.no_telp LIKE :s3 OR p.instansi LIKE :s4)";
     $params[':s1'] = "%{$search}%";
     $params[':s2'] = "%{$search}%";
     $params[':s3'] = "%{$search}%";
     $params[':s4'] = "%{$search}%";
 }
 
-// Total Rows
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan p {$whereClause}");
 $countStmt->execute($params);
 $totalRows = $countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $limit));
 
-// Fetch Data Pelanggan + Realtime Sync Total Pembelian
 $dataStmt = $pdo->prepare("
     SELECT p.*, 
            COALESCE((SELECT SUM(harga_produk * jumlah) FROM penjualan WHERE pelanggan_id = p.id), p.total, 0) AS total_belanja_real
@@ -122,6 +135,8 @@ $dataStmt = $pdo->prepare("
 ");
 $dataStmt->execute($params);
 $pelangganList = $dataStmt->fetchAll();
+
+$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://{$_SERVER['HTTP_HOST']}/public/pelanggan.php";
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -134,7 +149,6 @@ $pelangganList = $dataStmt->fetchAll();
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
 
-    <!-- Header Navigation -->
     <header class="bg-gray-900 text-white shadow-md">
         <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center space-x-3">
@@ -143,11 +157,11 @@ $pelangganList = $dataStmt->fetchAll();
                 </div>
                 <div>
                     <h1 class="text-lg font-bold leading-tight">Master Pelanggan</h1>
-                    <p class="text-xs text-gray-400">Dapoer Ela 85 - Database Pelanggan & Instansi</p>
+                    <p class="text-xs text-gray-400">Dapoer Ela 85 - Database Pelanggan & PIN Akses</p>
                 </div>
             </div>
             <div class="flex items-center space-x-3">
-                <a href="index.php" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition flex items-center gap-1">
+                <a href="index.php" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition">
                     <i class="fas fa-chart-line"></i> Dashboard Penjualan
                 </a>
                 <a href="logout.php" onclick="return confirm('Keluar dari sistem?')" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition">
@@ -159,33 +173,31 @@ $pelangganList = $dataStmt->fetchAll();
 
     <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
-        <!-- Notification Alerts -->
         <?php if ($message): ?>
             <div class="bg-emerald-100 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
                 <span><i class="fas fa-check-circle mr-1"></i> <?= htmlspecialchars($message) ?></span>
-                <button onclick="this.parentElement.remove()" class="text-emerald-600 hover:text-emerald-900"><i class="fas fa-times"></i></button>
+                <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
             </div>
         <?php endif; ?>
 
         <?php if ($error): ?>
             <div class="bg-rose-100 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
                 <span><i class="fas fa-exclamation-triangle mr-1"></i> <?= htmlspecialchars($error) ?></span>
-                <button onclick="this.parentElement.remove()" class="text-rose-600 hover:text-rose-900"><i class="fas fa-times"></i></button>
+                <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
             </div>
         <?php endif; ?>
 
-        <!-- Title & Action Bar -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
                 <h2 class="text-2xl font-bold text-gray-800">Daftar Master Pelanggan</h2>
-                <p class="text-xs text-gray-500">Kelola informasi kontak, NIK, instansi, dan riwayat akumulasi belanja pelanggan.</p>
+                <p class="text-xs text-gray-500">Kelola kontak, instansi, PIN unik 6 digit, dan link publik pelanggan.</p>
             </div>
             <button onclick="openModal('create')" class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
                 <i class="fas fa-user-plus"></i> Tambah Pelanggan
             </button>
         </div>
 
-        <!-- Filter & Search Bar -->
+        <!-- Filter Bar -->
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <form method="GET" class="flex flex-wrap md:flex-nowrap gap-3 items-end">
                 <div class="w-full md:w-40">
@@ -200,7 +212,7 @@ $pelangganList = $dataStmt->fetchAll();
                 <div class="w-full md:flex-1">
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Cari Pelanggan</label>
                     <div class="relative">
-                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari nama, NIK KTP, No Telp, atau Instansi..." class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari nama, PIN, No Telp, atau Instansi..." class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
                         <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
                     </div>
                 </div>
@@ -226,10 +238,9 @@ $pelangganList = $dataStmt->fetchAll();
                         <tr>
                             <th class="py-3.5 px-4">ID</th>
                             <th class="py-3.5 px-4">Nama Pelanggan</th>
-                            <th class="py-3.5 px-4">NIK KTP</th>
+                            <th class="py-3.5 px-4 text-center">PIN Publik</th>
                             <th class="py-3.5 px-4">No. Telepon</th>
                             <th class="py-3.5 px-4">Instansi</th>
-                            <th class="py-3.5 px-4">Alamat</th>
                             <th class="py-3.5 px-4 text-right">Total Akumulasi</th>
                             <th class="py-3.5 px-4 text-center">Status</th>
                             <th class="py-3.5 px-4 text-center">Aksi</th>
@@ -238,22 +249,25 @@ $pelangganList = $dataStmt->fetchAll();
                     <tbody class="divide-y divide-gray-100">
                         <?php if (empty($pelangganList)): ?>
                             <tr>
-                                <td colspan="9" class="text-center py-8 text-gray-400">
+                                <td colspan="8" class="text-center py-8 text-gray-400">
                                     <i class="fas fa-users-slash text-3xl mb-2 block"></i>
                                     Tidak ada data pelanggan yang ditemukan.
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($pelangganList as $p): ?>
+                            <?php foreach ($pelangganList as $p): 
+                                $shareUrl = "{$baseUrl}?id={$p['id']}&pin={$p['pin']}";
+                            ?>
                                 <tr class="hover:bg-gray-50/80 transition">
                                     <td class="py-3 px-4 text-xs font-mono text-gray-400">#<?= $p['id'] ?></td>
                                     <td class="py-3 px-4 font-bold text-gray-900"><?= htmlspecialchars($p['nama']) ?></td>
-                                    <td class="py-3 px-4 text-xs font-mono text-gray-600"><?= htmlspecialchars($p['nik_ktp'] ?: '-') ?></td>
+                                    <td class="py-3 px-4 text-center">
+                                        <span class="font-mono text-xs font-bold bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200">
+                                            <?= htmlspecialchars($p['pin'] ?: '------') ?>
+                                        </span>
+                                    </td>
                                     <td class="py-3 px-4 text-gray-600 whitespace-nowrap"><?= htmlspecialchars($p['no_telp'] ?: '-') ?></td>
                                     <td class="py-3 px-4 text-gray-600"><?= htmlspecialchars($p['instansi'] ?: '-') ?></td>
-                                    <td class="py-3 px-4 text-gray-500 text-xs max-w-xs truncate" title="<?= htmlspecialchars($p['alamat'] ?? '') ?>">
-                                        <?= htmlspecialchars($p['alamat'] ?: '-') ?>
-                                    </td>
                                     <td class="py-3 px-4 text-right font-bold text-emerald-600 whitespace-nowrap">
                                         <?= formatRupiah($p['total_belanja_real']) ?>
                                     </td>
@@ -261,6 +275,13 @@ $pelangganList = $dataStmt->fetchAll();
                                         <?= renderStatusBadge($p['status']) ?>
                                     </td>
                                     <td class="py-3 px-4 text-center whitespace-nowrap space-x-1">
+                                        <!-- Copy Link Button -->
+                                        <button onclick='copyUrl("<?= $shareUrl ?>")' class="bg-gray-100 hover:bg-orange-100 text-orange-600 p-2 rounded-lg text-xs transition" title="Salin Link Publik">
+                                            <i class="fas fa-link"></i>
+                                        </button>
+                                        <a href="pelanggan-detail.php?id=<?= $p['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-blue-600 p-2 rounded-lg text-xs transition inline-block" title="Detail Pelanggan">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
                                         <button onclick='openModal("update", <?= json_encode($p) ?>)' class="bg-gray-100 hover:bg-gray-200 text-amber-600 p-2 rounded-lg text-xs transition" title="Edit Pelanggan">
                                             <i class="fas fa-edit"></i>
                                         </button>
@@ -282,7 +303,6 @@ $pelangganList = $dataStmt->fetchAll();
             <!-- Pagination Bar -->
             <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2 text-xs text-gray-600">
                 <span>Menampilkan <b><?= count($pelangganList) ?></b> dari total <b><?= $totalRows ?></b> pelanggan</span>
-                
                 <div class="flex items-center space-x-1">
                     <?php if ($page > 1): ?>
                         <a href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>" class="px-3 py-1.5 border rounded bg-white hover:bg-gray-100">Prev</a>
@@ -321,8 +341,8 @@ $pelangganList = $dataStmt->fetchAll();
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-semibold text-gray-600 mb-1">NIK KTP (Opsional)</label>
-                        <input type="text" name="nik_ktp" id="inputNik" placeholder="327101..." class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">PIN Publik (6 Digit)</label>
+                        <input type="text" name="pin" id="inputPin" maxlength="6" placeholder="Otomatis" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono text-center font-bold">
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-gray-600 mb-1">No. Telepon (Opsional)</label>
@@ -357,7 +377,6 @@ $pelangganList = $dataStmt->fetchAll();
         </div>
     </div>
 
-    <!-- Script JavaScript modal handler & double-submit prevention -->
     <script>
         function openModal(mode, data = null) {
             const modal = document.getElementById('pelangganModal');
@@ -371,7 +390,7 @@ $pelangganList = $dataStmt->fetchAll();
                 document.getElementById('modalTitle').innerText = 'Tambah Pelanggan Baru';
                 document.getElementById('formId').value = '';
                 document.getElementById('inputNama').value = '';
-                document.getElementById('inputNik').value = '';
+                document.getElementById('inputPin').value = '';
                 document.getElementById('inputTelp').value = '';
                 document.getElementById('inputInstansi').value = '';
                 document.getElementById('inputStatus').value = 'aktif';
@@ -380,7 +399,7 @@ $pelangganList = $dataStmt->fetchAll();
                 document.getElementById('modalTitle').innerText = 'Edit Pelanggan #' + data.id;
                 document.getElementById('formId').value = data.id;
                 document.getElementById('inputNama').value = data.nama || '';
-                document.getElementById('inputNik').value = data.nik_ktp || '';
+                document.getElementById('inputPin').value = data.pin || '';
                 document.getElementById('inputTelp').value = data.no_telp || '';
                 document.getElementById('inputInstansi').value = data.instansi || '';
                 document.getElementById('inputStatus').value = data.status || 'aktif';
@@ -397,11 +416,16 @@ $pelangganList = $dataStmt->fetchAll();
             modal.classList.remove('flex');
         }
 
-        // Mencegah klik dobel pada tombol submit
         function preventDoubleSubmit(form) {
             const btnSubmit = document.getElementById('btnSubmit');
             btnSubmit.disabled = true;
             btnSubmit.innerText = "Menyimpan...";
+        }
+
+        function copyUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Link publik pelanggan berhasil disalin:\n' + url);
+            });
         }
     </script>
 </body>
