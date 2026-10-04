@@ -96,7 +96,6 @@ function maskNIK($nik) {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-600">
                 <p><i class="fas fa-building w-4 text-gray-400"></i> Instansi: <b><?= htmlspecialchars($pelanggan['instansi'] ?: '-') ?></b></p>
-                <p><i class="fas fa-id-card w-4 text-gray-400"></i> NIK Terdaftar: <b><?= htmlspecialchars(maskNIK($pelanggan['nik_ktp'])) ?></b></p>
             </div>
         </div>
 
