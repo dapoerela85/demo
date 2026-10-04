@@ -8,6 +8,16 @@ if (!$id) {
     exit;
 }
 
+// Helper Generate PIN 6 Digit jika pelanggan lama belum memiliki PIN
+function generateUniquePin($pdo) {
+    do {
+        $pin = str_pad(mt_rand(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE pin = ?");
+        $stmt->execute([$pin]);
+    } while ($stmt->fetchColumn() > 0);
+    return $pin;
+}
+
 // 1. Ambil Profil Pelanggan Master
 $stmt = $pdo->prepare("SELECT * FROM pelanggan WHERE id = ?");
 $stmt->execute([$id]);
@@ -15,6 +25,14 @@ $pelanggan = $stmt->fetch();
 
 if (!$pelanggan) {
     die("<div style='padding:20px; font-family:sans-serif; color:red;'>Data pelanggan tidak ditemukan. <a href='pelanggan.php'>Kembali ke Master Pelanggan</a></div>");
+}
+
+// Auto-generate PIN jika PIN masih kosong
+if (empty($pelanggan['pin']) || strlen($pelanggan['pin']) !== 6) {
+    $newPin = generateUniquePin($pdo);
+    $updatePinStmt = $pdo->prepare("UPDATE pelanggan SET pin = ? WHERE id = ?");
+    $updatePinStmt->execute([$newPin, $id]);
+    $pelanggan['pin'] = $newPin;
 }
 
 // 2. Ambil Semua Riwayat Transaksi Penjualan milik Pelanggan ini
@@ -42,8 +60,8 @@ foreach ($historyList as $item) {
     }
 }
 
-// Domain URL untuk Public Share Link
-$publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://{$_SERVER['HTTP_HOST']}/public/pelanggan.php?id={$pelanggan['id']}";
+// Format Domain URL dengan PIN 6 Digit untuk Public Share Link
+$publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://{$_SERVER['HTTP_HOST']}/public/pelanggan.php?id={$pelanggan['id']}&pin={$pelanggan['pin']}";
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -58,14 +76,14 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
 
     <div class="max-w-5xl mx-auto space-y-6">
 
-        <!-- Top Nav -->
-        <div class="flex justify-between items-center">
+        <!-- Top Navigation -->
+        <div class="flex flex-wrap justify-between items-center gap-3">
             <a href="pelanggan.php" class="text-sm font-semibold text-gray-600 hover:text-orange-600 transition flex items-center gap-2">
                 <i class="fas fa-arrow-left"></i> Kembali ke Master Pelanggan
             </a>
             <div class="flex items-center gap-2">
-                <button onclick="copyPublicLink()" class="text-xs bg-orange-600 hover:bg-orange-700 text-white font-semibold px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1">
-                    <i class="fas fa-share-alt"></i> Salin Link Publik
+                <button onclick="copyPublicLink()" class="text-xs bg-orange-600 hover:bg-orange-700 text-white font-semibold px-3.5 py-2 rounded-lg shadow-sm transition flex items-center gap-1.5">
+                    <i class="fas fa-share-alt"></i> Salin Public Link + PIN
                 </button>
             </div>
         </div>
@@ -79,7 +97,7 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
                 </div>
                 
                 <div class="grid grid-cols-2 gap-2 text-xs text-gray-600 pt-2 border-t border-gray-100">
-                    <p><i class="fas fa-id-card w-4 text-gray-400"></i> NIK KTP: <b><?= htmlspecialchars($pelanggan['nik_ktp'] ?: '-') ?></b></p>
+                    <p><i class="fas fa-key w-4 text-orange-500"></i> PIN Akses Publik: <b class="font-mono text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200"><?= htmlspecialchars($pelanggan['pin']) ?></b></p>
                     <p><i class="fas fa-phone w-4 text-gray-400"></i> No. Telp: <b><?= htmlspecialchars($pelanggan['no_telp'] ?: '-') ?></b></p>
                     <p><i class="fas fa-building w-4 text-gray-400"></i> Instansi: <b><?= htmlspecialchars($pelanggan['instansi'] ?: '-') ?></b></p>
                     <p><i class="fas fa-map-marker-alt w-4 text-gray-400"></i> Alamat: <b><?= htmlspecialchars($pelanggan['alamat'] ?: '-') ?></b></p>
@@ -87,13 +105,18 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
             </div>
 
             <!-- Public Share Box -->
-            <div class="bg-orange-50 p-4 rounded-xl border border-orange-100 flex flex-col justify-between">
+            <div class="bg-orange-50/70 p-4 rounded-xl border border-orange-100 flex flex-col justify-between space-y-3">
                 <div>
-                    <h4 class="text-xs font-bold text-orange-900 uppercase">Public Share Link</h4>
-                    <p class="text-[11px] text-orange-700 mt-1">Gunakan link ini untuk memberikan lembar riwayat transaksi kepada pelanggan (nama & NIK disamarkan).</p>
+                    <h4 class="text-xs font-bold text-orange-900 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fas fa-link"></i> Public Share Link (PIN)
+                    </h4>
+                    <p class="text-[11px] text-orange-700 mt-1">Bagikan link ini ke pelanggan. Akses aman terkunci menggunakan PIN 6 digit unik.</p>
                 </div>
-                <div class="mt-3">
-                    <input type="text" id="shareInput" readonly value="<?= $publicShareUrl ?>" class="w-full text-xs font-mono p-2 border border-orange-200 rounded-lg bg-white text-gray-600 focus:outline-none">
+                <div>
+                    <input type="text" id="shareInput" readonly value="<?= $publicShareUrl ?>" class="w-full text-xs font-mono p-2 border border-orange-200 rounded-lg bg-white text-gray-700 focus:outline-none">
+                    <button onclick="copyPublicLink()" class="w-full mt-2 text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold py-1.5 rounded-lg border border-orange-200 transition">
+                        <i class="fas fa-copy mr-1"></i> Salin URL
+                    </button>
                 </div>
             </div>
         </div>
@@ -116,7 +139,12 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
 
         <!-- Table History -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
-            <h3 class="font-bold text-gray-800 text-base">Riwayat Transaksi Penjualan</h3>
+            <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 class="font-bold text-gray-800 text-base">Riwayat Transaksi Penjualan</h3>
+                <span class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
+                    <?= count($historyList) ?> Transaksi
+                </span>
+            </div>
 
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
@@ -125,7 +153,7 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
                             <th class="p-3">ID</th>
                             <th class="p-3">Tanggal</th>
                             <th class="p-3">Produk</th>
-                            <th class="p-3 text-right">Harga</th>
+                            <th class="p-3 text-right">Harga Satuan</th>
                             <th class="p-3 text-center">Jumlah</th>
                             <th class="p-3 text-right">Total</th>
                             <th class="p-3 text-center">Status</th>
@@ -134,7 +162,7 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
                     <tbody class="divide-y divide-gray-100">
                         <?php if (empty($historyList)): ?>
                             <tr>
-                                <td colspan="7" class="text-center py-6 text-gray-400">Belum ada riwayat transaksi.</td>
+                                <td colspan="7" class="text-center py-6 text-gray-400">Belum ada riwayat transaksi recorded.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($historyList as $h): ?>
@@ -160,8 +188,9 @@ $publicShareUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "htt
         function copyPublicLink() {
             const input = document.getElementById('shareInput');
             input.select();
-            document.execCommand('copy');
-            alert('Link publik berhasil disalin!');
+            navigator.clipboard.writeText(input.value).then(() => {
+                alert('Public Share Link (+ PIN) berhasil disalin:\n' + input.value);
+            });
         }
     </script>
 </body>
