@@ -1,165 +1,432 @@
 <?php
-// public/pelanggan.php
-require_once __DIR__ . '/../config.php';
+// admin/pelanggan.php
+require_once __DIR__ . '/auth.php';
 
-$id = $_GET['id'] ?? null;
-if (!$id) {
-    die("<div style='padding:40px; text-align:center; font-family:sans-serif;'>
-            <h2>Halaman Tidak Ditemukan</h2>
-            <p>Parameter pelanggan tidak valid.</p>
-         </div>");
+$message = $_GET['msg'] ?? '';
+$error   = $_GET['err'] ?? '';
+
+// Helper Generate PIN 6 Digit Unik
+function generateUniquePin($pdo) {
+    do {
+        $pin = str_pad(mt_rand(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE pin = ?");
+        $stmt->execute([$pin]);
+    } while ($stmt->fetchColumn() > 0);
+    return $pin;
 }
 
-// 1. Ambil Profil Pelanggan
-$stmt = $pdo->prepare("SELECT * FROM pelanggan WHERE id = ?");
-$stmt->execute([$id]);
-$pelanggan = $stmt->fetch();
+// 1. Handle Form Submissions (Create, Update, Delete)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
 
-if (!$pelanggan) {
-    die("<div style='padding:40px; text-align:center; font-family:sans-serif;'>
-            <h2>Pelanggan Tidak Ditemukan</h2>
-            <p>Data tidak tersedia di sistem.</p>
-         </div>");
-}
+    if ($action === 'create') {
+        $nama     = trim($_POST['nama'] ?? '');
+        $nik_ktp  = trim($_POST['nik_ktp'] ?? '');
+        $no_telp  = trim($_POST['no_telp'] ?? '');
+        $instansi = trim($_POST['instansi'] ?? '');
+        $alamat   = trim($_POST['alamat'] ?? '');
+        $status   = $_POST['status'] ?? 'aktif';
+        $pin      = trim($_POST['pin'] ?? '');
 
-// 2. Fetch Riwayat Transaksi
-$historyStmt = $pdo->prepare("
-    SELECT *, (harga_produk * jumlah) AS total_harga 
-    FROM penjualan 
-    WHERE pelanggan_id = ? OR (pelanggan_id IS NULL AND nama = ?) 
-    ORDER BY tgl DESC, id DESC
-");
-$historyStmt->execute([$id, $pelanggan['nama']]);
-$historyList = $historyStmt->fetchAll();
+        if (empty($pin) || strlen($pin) !== 6) {
+            $pin = generateUniquePin($pdo);
+        }
 
-// 3. Hitung Ringkasan Belanja
-$totalAkumulasi = 0;
-$totalLunas = 0;
-$totalBelumLunas = 0;
+        if (!empty($nama)) {
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan WHERE nama = ? AND (no_telp = ? AND no_telp != '')");
+            $checkStmt->execute([$nama, $no_telp]);
 
-foreach ($historyList as $item) {
-    $subtotal = floatval($item['total_harga']);
-    $totalAkumulasi += $subtotal;
-    if (strtolower($item['status'] ?? '') === 'lunas') {
-        $totalLunas += $subtotal;
-    } else {
-        $totalBelumLunas += $subtotal;
+            if ($checkStmt->fetchColumn() > 0) {
+                header("Location: pelanggan.php?err=" . urlencode('Pelanggan dengan nama dan nomor telepon tersebut sudah terdaftar!'));
+                exit;
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO pelanggan (nama, nik_ktp, pin, no_telp, instansi, alamat, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$nama, $nik_ktp ?: null, $pin, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status]);
+
+            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil ditambahkan dengan PIN: ' . $pin));
+            exit;
+        } else {
+            header("Location: pelanggan.php?err=" . urlencode('Nama pelanggan wajib diisi!'));
+            exit;
+        }
+
+    } elseif ($action === 'update') {
+        $id       = intval($_POST['id'] ?? 0);
+        $nama     = trim($_POST['nama'] ?? '');
+        $nik_ktp  = trim($_POST['nik_ktp'] ?? '');
+        $no_telp  = trim($_POST['no_telp'] ?? '');
+        $instansi = trim($_POST['instansi'] ?? '');
+        $alamat   = trim($_POST['alamat'] ?? '');
+        $status   = $_POST['status'] ?? 'aktif';
+        $pin      = trim($_POST['pin'] ?? '');
+
+        if (empty($pin) || strlen($pin) !== 6) {
+            $pin = generateUniquePin($pdo);
+        }
+
+        if ($id > 0 && !empty($nama)) {
+            $stmt = $pdo->prepare("UPDATE pelanggan SET nama=?, nik_ktp=?, pin=?, no_telp=?, instansi=?, alamat=?, status=? WHERE id=?");
+            $stmt->execute([$nama, $nik_ktp ?: null, $pin, $no_telp ?: null, $instansi ?: null, $alamat ?: null, $status, $id]);
+
+            header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil diperbarui.'));
+            exit;
+        } else {
+            header("Location: pelanggan.php?err=" . urlencode('ID tidak valid atau nama pelanggan kosong!'));
+            exit;
+        }
+
+    } elseif ($action === 'delete') {
+        $id = intval($_POST['id'] ?? 0);
+        if ($id > 0) {
+            $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM penjualan WHERE pelanggan_id = ?");
+            $checkStmt->execute([$id]);
+
+            if ($checkStmt->fetchColumn() > 0) {
+                $stmt = $pdo->prepare("UPDATE pelanggan SET status = 'non-aktif' WHERE id = ?");
+                $stmt->execute([$id]);
+                header("Location: pelanggan.php?msg=" . urlencode('Pelanggan memiliki riwayat transaksi. Status diubah menjadi non-aktif.'));
+                exit;
+            } else {
+                $stmt = $pdo->prepare("DELETE FROM pelanggan WHERE id = ?");
+                $stmt->execute([$id]);
+                header("Location: pelanggan.php?msg=" . urlencode('Data pelanggan berhasil dihapus secara permanen.'));
+                exit;
+            }
+        }
     }
 }
 
-// Helper Masking NIK
-function maskNIK($nik) {
-    if (empty($nik)) return '-';
-    $len = strlen($nik);
-    if ($len <= 4) return $nik;
-    return substr($nik, 0, 4) . str_repeat('*', $len - 8) . substr($nik, -4);
+// 2. Filter & Pagination Parameters
+$statusFilter = $_GET['status'] ?? '';
+$search       = trim($_GET['search'] ?? '');
+$page         = max(1, intval($_GET['page'] ?? 1));
+$limit        = 10;
+$offset       = ($page - 1) * $limit;
+
+$whereClause = "WHERE 1=1";
+$params = [];
+
+if (!empty($statusFilter)) {
+    $whereClause .= " AND p.status = :status";
+    $params[':status'] = $statusFilter;
 }
+
+if (!empty($search)) {
+    $whereClause .= " AND (p.nama LIKE :s1 OR p.pin LIKE :s2 OR p.no_telp LIKE :s3 OR p.instansi LIKE :s4)";
+    $params[':s1'] = "%{$search}%";
+    $params[':s2'] = "%{$search}%";
+    $params[':s3'] = "%{$search}%";
+    $params[':s4'] = "%{$search}%";
+}
+
+$countStmt = $pdo->prepare("SELECT COUNT(*) FROM pelanggan p {$whereClause}");
+$countStmt->execute($params);
+$totalRows = $countStmt->fetchColumn();
+$totalPages = max(1, ceil($totalRows / $limit));
+
+$dataStmt = $pdo->prepare("
+    SELECT p.*, 
+           COALESCE((SELECT SUM(harga_produk * jumlah) FROM penjualan WHERE pelanggan_id = p.id), p.total, 0) AS total_belanja_real
+    FROM pelanggan p 
+    {$whereClause} 
+    ORDER BY p.id DESC 
+    LIMIT {$limit} OFFSET {$offset}
+");
+$dataStmt->execute($params);
+$pelangganList = $dataStmt->fetchAll();
+
+$baseUrl = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://{$_SERVER['HTTP_HOST']}/public/pelanggan.php";
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Laporan Transaksi - Dapoer Ela 85</title>
+    <title>Master Pelanggan - Admin Dapoer Ela 85</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans antialiased p-4 md:p-6">
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
 
-    <div class="max-w-4xl mx-auto space-y-6">
-
-        <!-- Public Header Bar -->
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
+    <header class="bg-gray-900 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center space-x-3">
-                <div class="bg-orange-600 text-white p-2.5 rounded-xl text-xl font-bold">
-                    <i class="fas fa-utensils"></i>
+                <div class="bg-orange-600 p-2 rounded-lg text-white font-bold text-lg">
+                    <i class="fas fa-users"></i>
                 </div>
                 <div>
-                    <h1 class="text-lg font-bold text-gray-900 leading-tight">Dapoer Ela 85</h1>
-                    <p class="text-xs text-gray-500">Lembar Catatan Transaksi Penjualan</p>
+                    <h1 class="text-lg font-bold leading-tight">Master Pelanggan</h1>
+                    <p class="text-xs text-gray-400">Dapoer Ela 85 - Database Pelanggan & PIN Akses</p>
                 </div>
             </div>
-            <a href="../index.php" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-semibold transition">
-                Halaman Utama
-            </a>
+            <div class="flex items-center space-x-3">
+                <a href="index.php" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg border border-gray-700 transition">
+                    <i class="fas fa-chart-line"></i> Dashboard Penjualan
+                </a>
+                <a href="logout.php" onclick="return confirm('Keluar dari sistem?')" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-semibold transition">
+                    <i class="fas fa-sign-out-alt"></i> Keluar
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+
+        <?php if ($message): ?>
+            <div class="bg-emerald-100 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
+                <span><i class="fas fa-check-circle mr-1"></i> <?= htmlspecialchars($message) ?></span>
+                <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($error): ?>
+            <div class="bg-rose-100 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs font-semibold flex items-center justify-between">
+                <span><i class="fas fa-exclamation-triangle mr-1"></i> <?= htmlspecialchars($error) ?></span>
+                <button onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+            </div>
+        <?php endif; ?>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">Daftar Master Pelanggan</h2>
+                <p class="text-xs text-gray-500">Kelola kontak, instansi, PIN unik 6 digit, dan link publik pelanggan.</p>
+            </div>
+            <button onclick="openModal('create')" class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center justify-center gap-2">
+                <i class="fas fa-user-plus"></i> Tambah Pelanggan
+            </button>
         </div>
 
-        <!-- Identitas Pelanggan (Disamarkan) -->
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            <div class="flex justify-between items-start border-b border-gray-100 pb-3">
-                <div>
-                    <p class="text-xs font-semibold text-gray-400 uppercase">Pelanggan Terhormat</p>
-                    <h2 class="text-2xl font-bold text-gray-900 mt-0.5"><?= htmlspecialchars(maskName($pelanggan['nama'])) ?></h2>
+        <!-- Filter Bar -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <form method="GET" class="flex flex-wrap md:flex-nowrap gap-3 items-end">
+                <div class="w-full md:w-40">
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Status Pelanggan</label>
+                    <select name="status" onchange="this.form.submit()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <option value="">Semua Status</option>
+                        <option value="aktif" <?= $statusFilter === 'aktif' ? 'selected' : '' ?>>Aktif</option>
+                        <option value="non-aktif" <?= $statusFilter === 'non-aktif' ? 'selected' : '' ?>>Non-Aktif</option>
+                    </select>
                 </div>
-                <?= renderStatusBadge($pelanggan['status']) ?>
-            </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-600">
-                <p><i class="fas fa-building w-4 text-gray-400"></i> Instansi: <b><?= htmlspecialchars($pelanggan['instansi'] ?: '-') ?></b></p>
-            </div>
+                <div class="w-full md:flex-1">
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Cari Pelanggan</label>
+                    <div class="relative">
+                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Cari nama, PIN, No Telp, atau Instansi..." class="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                        <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
+                    </div>
+                </div>
+
+                <div class="w-full md:w-auto flex gap-2">
+                    <button type="submit" class="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm transition font-medium flex items-center gap-1">
+                        <i class="fas fa-filter text-xs"></i> Filter
+                    </button>
+                    <?php if ($statusFilter || $search): ?>
+                        <a href="pelanggan.php" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm transition flex items-center gap-1">
+                            Reset
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </form>
         </div>
 
-        <!-- Cards Ringkasan Pembayaran -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <p class="text-xs font-semibold text-gray-400 uppercase">Total Akumulasi Transaksi</p>
-                <p class="text-2xl font-bold text-gray-800 mt-1"><?= formatRupiah($totalAkumulasi) ?></p>
-            </div>
-
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <p class="text-xs font-semibold text-emerald-600 uppercase">Sudah Lunas</p>
-                <p class="text-2xl font-bold text-emerald-700 mt-1"><?= formatRupiah($totalLunas) ?></p>
-            </div>
-
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                <p class="text-xs font-semibold text-rose-600 uppercase">Sisa Belum Lunas</p>
-                <p class="text-2xl font-bold text-rose-700 mt-1"><?= formatRupiah($totalBelumLunas) ?></p>
-            </div>
-        </div>
-
-        <!-- Tabel Rincian Transaksi -->
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-            <h3 class="font-bold text-gray-800 text-base">Rincian Riwayat Transaksi</h3>
-
+        <!-- Table Master Pelanggan -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-50 text-gray-500 text-xs font-semibold uppercase tracking-wider">
+                    <thead class="bg-gray-100 text-gray-600 font-semibold border-b border-gray-200 text-xs uppercase tracking-wider">
                         <tr>
-                            <th class="p-3.5">Tanggal</th>
-                            <th class="p-3.5">Nama Produk</th>
-                            <th class="p-3.5 text-right">Harga Satuan</th>
-                            <th class="p-3.5 text-center">Jumlah</th>
-                            <th class="p-3.5 text-right">Total Harga</th>
-                            <th class="p-3.5 text-center">Status</th>
+                            <th class="py-3.5 px-4">ID</th>
+                            <th class="py-3.5 px-4">Nama Pelanggan</th>
+                            <th class="py-3.5 px-4 text-center">PIN Publik</th>
+                            <th class="py-3.5 px-4">No. Telepon</th>
+                            <th class="py-3.5 px-4">Instansi</th>
+                            <th class="py-3.5 px-4 text-right">Total Akumulasi</th>
+                            <th class="py-3.5 px-4 text-center">Status</th>
+                            <th class="py-3.5 px-4 text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100">
-                        <?php if (empty($historyList)): ?>
+                        <?php if (empty($pelangganList)): ?>
                             <tr>
-                                <td colspan="6" class="text-center py-6 text-gray-400">Belum ada catatan transaksi.</td>
+                                <td colspan="8" class="text-center py-8 text-gray-400">
+                                    <i class="fas fa-users-slash text-3xl mb-2 block"></i>
+                                    Tidak ada data pelanggan yang ditemukan.
+                                </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($historyList as $h): ?>
+                            <?php foreach ($pelangganList as $p): 
+                                $shareUrl = "{$baseUrl}?id={$p['id']}&pin={$p['pin']}";
+                            ?>
                                 <tr class="hover:bg-gray-50/80 transition">
-                                    <td class="p-3.5 whitespace-nowrap"><?= date('d/m/Y', strtotime($h['tgl'])) ?></td>
-                                    <td class="p-3.5 font-medium text-gray-800"><?= htmlspecialchars($h['nama_produk']) ?></td>
-                                    <td class="p-3.5 text-right"><?= formatRupiah($h['harga_produk']) ?></td>
-                                    <td class="p-3.5 text-center font-semibold"><?= $h['jumlah'] ?></td>
-                                    <td class="p-3.5 text-right font-bold text-orange-600"><?= formatRupiah($h['total_harga']) ?></td>
-                                    <td class="p-3.5 text-center whitespace-nowrap"><?= renderStatusBadge($h['status'] ?? 'lunas') ?></td>
+                                    <td class="py-3 px-4 text-xs font-mono text-gray-400">#<?= $p['id'] ?></td>
+                                    <td class="py-3 px-4 font-bold text-gray-900"><?= htmlspecialchars($p['nama']) ?></td>
+                                    <td class="py-3 px-4 text-center">
+                                        <span class="font-mono text-xs font-bold bg-orange-100 text-orange-800 px-2 py-0.5 rounded border border-orange-200">
+                                            <?= htmlspecialchars($p['pin'] ?: '------') ?>
+                                        </span>
+                                    </td>
+                                    <td class="py-3 px-4 text-gray-600 whitespace-nowrap"><?= htmlspecialchars($p['no_telp'] ?: '-') ?></td>
+                                    <td class="py-3 px-4 text-gray-600"><?= htmlspecialchars($p['instansi'] ?: '-') ?></td>
+                                    <td class="py-3 px-4 text-right font-bold text-emerald-600 whitespace-nowrap">
+                                        <?= formatRupiah($p['total_belanja_real']) ?>
+                                    </td>
+                                    <td class="py-3 px-4 text-center whitespace-nowrap">
+                                        <?= renderStatusBadge($p['status']) ?>
+                                    </td>
+                                    <td class="py-3 px-4 text-center whitespace-nowrap space-x-1">
+                                        <!-- Copy Link Button -->
+                                        <button onclick='copyUrl("<?= $shareUrl ?>")' class="bg-gray-100 hover:bg-orange-100 text-orange-600 p-2 rounded-lg text-xs transition" title="Salin Link Publik">
+                                            <i class="fas fa-link"></i>
+                                        </button>
+                                        <a href="pelanggan-detail.php?id=<?= $p['id'] ?>" class="bg-gray-100 hover:bg-gray-200 text-blue-600 p-2 rounded-lg text-xs transition inline-block" title="Detail Pelanggan">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <button onclick='openModal("update", <?= json_encode($p) ?>)' class="bg-gray-100 hover:bg-gray-200 text-amber-600 p-2 rounded-lg text-xs transition" title="Edit Pelanggan">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <form method="POST" class="inline-block" onsubmit="return confirm('Hapus/Non-aktifkan pelanggan \'<?= htmlspecialchars($p['nama']) ?>\'?');">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                                            <button type="submit" class="bg-gray-100 hover:bg-red-50 text-red-600 p-2 rounded-lg text-xs transition" title="Hapus Pelanggan">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination Bar -->
+            <div class="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2 text-xs text-gray-600">
+                <span>Menampilkan <b><?= count($pelangganList) ?></b> dari total <b><?= $totalRows ?></b> pelanggan</span>
+                <div class="flex items-center space-x-1">
+                    <?php if ($page > 1): ?>
+                        <a href="?<?= http_build_query(array_merge($_GET, ['page' => $page - 1])) ?>" class="px-3 py-1.5 border rounded bg-white hover:bg-gray-100">Prev</a>
+                    <?php endif; ?>
+
+                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                        <a href="?<?= http_build_query(array_merge($_GET, ['page' => $i])) ?>" class="px-3 py-1.5 border rounded <?= $i == $page ? 'bg-orange-600 text-white font-bold border-orange-600' : 'bg-white hover:bg-gray-100' ?>">
+                            <?= $i ?>
+                        </a>
+                    <?php endfor; ?>
+
+                    <?php if ($page < $totalPages): ?>
+                        <a href="?<?= http_build_query(array_merge($_GET, ['page' => $page + 1])) ?>" class="px-3 py-1.5 border rounded bg-white hover:bg-gray-100">Next</a>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
+    </main>
 
-        <footer class="text-center text-xs text-gray-400 py-4">
-            &copy; <?= date('Y') ?> Dapoer Ela 85. Seluruh Hak Cipta Dilindungi.
-        </footer>
+    <!-- Modal Form (Tambah & Edit Pelanggan) -->
+    <div id="pelangganModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+            <div class="bg-gray-900 text-white px-5 py-4 flex justify-between items-center">
+                <h3 id="modalTitle" class="font-bold text-base">Tambah Pelanggan Baru</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <form method="POST" id="pelangganForm" onsubmit="preventDoubleSubmit(this)" class="p-5 space-y-4">
+                <input type="hidden" name="action" id="formAction" value="create">
+                <input type="hidden" name="id" id="formId" value="">
 
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Nama Lengkap <span class="text-red-500">*</span></label>
+                    <input type="text" name="nama" id="inputNama" required placeholder="Siti Aisyah" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">PIN Publik (6 Digit)</label>
+                        <input type="text" name="pin" id="inputPin" maxlength="6" placeholder="Otomatis" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono text-center font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">No. Telepon (Opsional)</label>
+                        <input type="text" name="no_telp" id="inputTelp" placeholder="08123456..." class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Instansi (Opsional)</label>
+                        <input type="text" name="instansi" id="inputInstansi" placeholder="Dinas Kesehatan" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                        <select name="status" id="inputStatus" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold">
+                            <option value="aktif">Aktif</option>
+                            <option value="non-aktif">Non-Aktif</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Alamat (Opsional)</label>
+                    <textarea name="alamat" id="inputAlamat" rows="2" placeholder="Jl. Raya Utama No. 45, Jakarta" class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-orange-500 focus:outline-none"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition">Batal</button>
+                    <button type="submit" id="btnSubmit" class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition">Simpan Data</button>
+                </div>
+            </form>
+        </div>
     </div>
 
+    <script>
+        function openModal(mode, data = null) {
+            const modal = document.getElementById('pelangganModal');
+            document.getElementById('formAction').value = mode;
+
+            const btnSubmit = document.getElementById('btnSubmit');
+            btnSubmit.disabled = false;
+            btnSubmit.innerText = "Simpan Data";
+
+            if (mode === 'create') {
+                document.getElementById('modalTitle').innerText = 'Tambah Pelanggan Baru';
+                document.getElementById('formId').value = '';
+                document.getElementById('inputNama').value = '';
+                document.getElementById('inputPin').value = '';
+                document.getElementById('inputTelp').value = '';
+                document.getElementById('inputInstansi').value = '';
+                document.getElementById('inputStatus').value = 'aktif';
+                document.getElementById('inputAlamat').value = '';
+            } else if (mode === 'update' && data) {
+                document.getElementById('modalTitle').innerText = 'Edit Pelanggan #' + data.id;
+                document.getElementById('formId').value = data.id;
+                document.getElementById('inputNama').value = data.nama || '';
+                document.getElementById('inputPin').value = data.pin || '';
+                document.getElementById('inputTelp').value = data.no_telp || '';
+                document.getElementById('inputInstansi').value = data.instansi || '';
+                document.getElementById('inputStatus').value = data.status || 'aktif';
+                document.getElementById('inputAlamat').value = data.alamat || '';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('pelangganModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function preventDoubleSubmit(form) {
+            const btnSubmit = document.getElementById('btnSubmit');
+            btnSubmit.disabled = true;
+            btnSubmit.innerText = "Menyimpan...";
+        }
+
+        function copyUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Link publik pelanggan berhasil disalin:\n' + url);
+            });
+        }
+    </script>
 </body>
 </html>
